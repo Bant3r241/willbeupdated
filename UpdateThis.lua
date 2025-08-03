@@ -1,4 +1,4 @@
--- AutoJoiner with Hybrid Teleport Strategy (UUID + Base64)
+-- AutoJoiner with Robust Teleport Handling (Hybrid UUID + Base64 Strategy)
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -6,9 +6,10 @@ local UserInputService = game:GetService("UserInputService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
-local HOP_INTERVAL = 2 -- seconds between hops
+local HOP_INTERVAL = 2.5 -- Increased from 2 to reduce rate limiting
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
+local MAX_UNAUTHORIZED_ATTEMPTS = 3 -- Max retries for unauthorized errors
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -19,10 +20,32 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
+local unauthorizedAttempts = 0
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
+
+-- Helper Functions
+local function isValidJobId(jobId)
+    if not jobId or type(jobId) ~= "string" then return false end
+    return #jobId >= 22 and #jobId <= 200 -- Valid Base64 Job ID length range
+end
+
+local function extractUuidFromJobId(jobId)
+    if not isValidJobId(jobId) then return nil end
+    
+    local success, decoded = pcall(function()
+        return game:GetService("HttpService"):Base64Decode(jobId)
+    end)
+    
+    if not success or not decoded or #decoded < 16 then
+        warn("Failed to decode Job ID or invalid length")
+        return nil
+    end
+    
+    return decoded:sub(1, 16) -- First 16 bytes = UUID
+end
 
 -- Main GUI
 local screenGui = Instance.new("ScreenGui")
@@ -298,21 +321,18 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- WebSocket Functions
-local function extractUuidFromJobId(jobId)
-    local success, decoded = pcall(function()
-        return game:GetService("HttpService"):Base64Decode(jobId)
-    end)
-    if not success or #decoded < 16 then return nil end
-    return decoded:sub(1, 16) -- First 16 bytes = UUID
-end
-
+-- Enhanced Teleport Function
 local function attemptTeleport(jobId, isHighValue)
     if not isRunning or isPaused then return false end
+    if not isValidJobId(jobId) then return false end
     
+    -- Rate limiting check
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
-        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
+        local waitTime = HOP_INTERVAL - (currentTime - lastHopTime)
+        statusLabel.Text = string.format("Waiting %.1fs...", waitTime)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+        task.wait(waitTime)
     end
     
     lastHopTime = os.time()
@@ -320,31 +340,73 @@ local function attemptTeleport(jobId, isHighValue)
     
     local teleportId = jobId
     local method = "Full"
+    local attemptCount = 1
+    
     if not isHighValue then
-        teleportId = extractUuidFromJobId(jobId)
-        method = "UUID"
-        if not teleportId then
-            warn("Failed to extract UUID from Job ID")
+        local uuid = extractUuidFromJobId(jobId)
+        if uuid then
+            teleportId = uuid
+            method = "UUID"
+        else
+            statusLabel.Text = "Status: Failed to extract UUID"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
             return false
         end
     end
     
     serverInfoLabel.Text = string.format("Server: %s... [%s]", string.sub(jobId, 1, 8), method)
     
-    local success, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, teleportId, player)
-    end)
-    
-    if not success then
-        warn("Teleport failed:", err)
-        statusLabel.Text = "Status: Failed - Retrying"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
+    -- Teleport with retry logic
+    while attemptCount <= 2 do
+        local success, result = pcall(function()
+            return TeleportService:TeleportToPlaceInstance(game.PlaceId, teleportId, player)
+        end)
+        
+        if success and result == true then
+            statusLabel.Text = string.format("Joined %s...", string.sub(jobId, 1, 8))
+            statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            unauthorizedAttempts = 0 -- Reset counter on success
+            return true
+        end
+        
+        -- Handle specific errors
+        if not success then
+            local err = tostring(result)
+            
+            if string.find(err, "Unauthorized") then
+                unauthorizedAttempts = unauthorizedAttempts + 1
+                if unauthorizedAttempts >= MAX_UNAUTHORIZED_ATTEMPTS then
+                    statusLabel.Text = "Status: Too many fails - Paused"
+                    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    isPaused = true
+                    return false
+                end
+                
+                statusLabel.Text = string.format("Retry %d/%d...", unauthorizedAttempts, MAX_UNAUTHORIZED_ATTEMPTS)
+                statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+                
+                -- Switch to full Base64 if UUID failed
+                if method == "UUID" and attemptCount == 1 then
+                    teleportId = jobId
+                    method = "Full"
+                    statusLabel.Text = statusLabel.Text .. " (Trying Full ID)"
+                end
+                
+                task.wait(1) -- Brief pause before retry
+            else
+                statusLabel.Text = "Status: Error - " .. string.sub(err, 1, 30)
+                statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                return false
+            end
+        end
+        
+        attemptCount = attemptCount + 1
     end
     
-    return true
+    return false
 end
 
+-- Updated WebSocket Message Handler
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
@@ -359,16 +421,19 @@ local function handleWebSocketMessage(message)
         return
     end
     
-    -- Extract data
-    local jobId = data.jobId
-    local serverName = data.serverName
+    -- Validate jobId
+    if not isValidJobId(data.jobId) then
+        statusLabel.Text = "Status: Invalid Job ID"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    -- Extract MPS value
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
     local mps = tonumber(mpsText) or 0
     
-    -- Determine server value tier
-    local isHighValue = (mps >= 10) -- 10M+/s is high value
-    
-    -- Apply MPS filter and teleport strategy
+    -- Determine server value tier and action
+    local isHighValue = (mps >= 10)
     local shouldJoin = false
     local actionText = "Skipping"
     
@@ -386,12 +451,13 @@ local function handleWebSocketMessage(message)
         actionText = "Joining [Full]"
     end
     
+    -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("%s %s (%.1fM/s)", actionText, string.sub(jobId, 1, 8), mps)
+        statusLabel.Text = string.format("%s %s (%.1fM/s)", actionText, string.sub(data.jobId, 1, 8), mps)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId, isHighValue)
+        attemptTeleport(data.jobId, isHighValue)
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mps)
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(data.jobId, 1, 8), mps)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
 end
@@ -445,6 +511,7 @@ startBtn.MouseButton1Click:Connect(function()
     isRunning = true
     isPaused = false
     connectionAttempts = 0
+    unauthorizedAttempts = 0
     connectWebSocket()
 end)
 
@@ -467,17 +534,17 @@ resumeBtn.MouseButton1Click:Connect(function()
     statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 end)
 
--- Debugging
+-- Enhanced Debug Information
 UserInputService.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.F5 then
         print("\n=== DEBUG INFO ===")
-        print("WebSocket URL:", WEBSOCKET_URL)
-        print("Connected:", socket and "Yes" or "No")
+        print("WebSocket:", socket and "Connected" or "Disconnected")
         print("Running:", isRunning and "Yes" or "No")
         print("Paused:", isPaused and "Yes" or "No")
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
+        print("Unauthorized Attempts:", unauthorizedAttempts)
         print("=========================")
     end
 end)
