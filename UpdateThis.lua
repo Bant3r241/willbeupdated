@@ -950,5 +950,3 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
-
-
