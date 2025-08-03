@@ -1,9 +1,9 @@
-
--- AutoJoiner with Perfect JSON Parsing and Rainbow Title
+-- Multi-Tab AutoJoiner with Perfect JSON Parsing and Rainbow Title
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -20,6 +20,7 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
+local currentTab = "AutoJoiner" -- Current active tab
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -142,45 +143,99 @@ end
 -- Start the animation
 coroutine.wrap(startAdvancedRainbowWave)()
 
+-- Tab System
+local tabButtons = {}
+local tabContents = {}
+
+-- Create tab buttons container
+local tabsContainer = Instance.new("Frame")
+tabsContainer.Size = UDim2.new(1, -40, 0, 30)
+tabsContainer.Position = UDim2.new(0, 20, 0, 60)
+tabsContainer.BackgroundTransparency = 1
+tabsContainer.Parent = frame
+
+-- AutoJoiner Tab Button
+local autoJoinerTabBtn = Instance.new("TextButton")
+autoJoinerTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
+autoJoinerTabBtn.Position = UDim2.new(0, 0, 0, 0)
+autoJoinerTabBtn.BackgroundColor3 = Color3.fromRGB(90, 0, 90)
+autoJoinerTabBtn.BorderSizePixel = 0
+autoJoinerTabBtn.Text = "AutoJoiner"
+autoJoinerTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoJoinerTabBtn.Font = Enum.Font.GothamBold
+autoJoinerTabBtn.TextSize = 14
+autoJoinerTabBtn.AutoButtonColor = false
+autoJoinerTabBtn.Parent = tabsContainer
+table.insert(tabButtons, autoJoinerTabBtn)
+
+-- Second Tab Button
+local secondTabBtn = Instance.new("TextButton")
+secondTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
+secondTabBtn.Position = UDim2.new(0.5, 5, 0, 0)
+secondTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+secondTabBtn.BorderSizePixel = 0
+secondTabBtn.Text = "Utilities"
+secondTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+secondTabBtn.Font = Enum.Font.GothamBold
+secondTabBtn.TextSize = 14
+secondTabBtn.AutoButtonColor = false
+secondTabBtn.Parent = tabsContainer
+table.insert(tabButtons, secondTabBtn)
+
+-- Create tab content frames
+local tabContentContainer = Instance.new("Frame")
+tabContentContainer.Size = UDim2.new(1, -40, 0, 450)
+tabContentContainer.Position = UDim2.new(0, 20, 0, 95)
+tabContentContainer.BackgroundTransparency = 1
+tabContentContainer.ClipsDescendants = true
+tabContentContainer.Parent = frame
+
+-- AutoJoiner Tab Content
+local autoJoinerTab = Instance.new("Frame")
+autoJoinerTab.Size = UDim2.new(1, 0, 1, 0)
+autoJoinerTab.BackgroundTransparency = 1
+autoJoinerTab.Parent = tabContentContainer
+tabContents["AutoJoiner"] = autoJoinerTab
+
 -- Status Label
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -40, 0, 20)
-statusLabel.Position = UDim2.new(0, 20, 0, 60)
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: Disconnected"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.Font = Enum.Font.Gotham
 statusLabel.TextSize = 14
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.Parent = frame
+statusLabel.Parent = autoJoinerTab
 
 -- Server Info Label
 local serverInfoLabel = Instance.new("TextLabel")
-serverInfoLabel.Size = UDim2.new(1, -40, 0, 20)
-serverInfoLabel.Position = UDim2.new(0, 20, 0, 85)
+serverInfoLabel.Size = UDim2.new(1, 0, 0, 20)
+serverInfoLabel.Position = UDim2.new(0, 0, 0, 25)
 serverInfoLabel.BackgroundTransparency = 1
 serverInfoLabel.Text = "Server: None"
 serverInfoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
 serverInfoLabel.Font = Enum.Font.Gotham
 serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
-serverInfoLabel.Parent = frame
+serverInfoLabel.Parent = autoJoinerTab
 
 -- MPS Dropdown System
 local mpsLabel = Instance.new("TextLabel")
-mpsLabel.Size = UDim2.new(1, -40, 0, 20)
-mpsLabel.Position = UDim2.new(0, 20, 0, 110)
+mpsLabel.Size = UDim2.new(1, 0, 0, 20)
+mpsLabel.Position = UDim2.new(0, 0, 0, 50)
 mpsLabel.BackgroundTransparency = 1
 mpsLabel.Text = "Select MPS Range:"
 mpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 mpsLabel.Font = Enum.Font.GothamBold
 mpsLabel.TextSize = 18
 mpsLabel.TextXAlignment = Enum.TextXAlignment.Left
-mpsLabel.Parent = frame
+mpsLabel.Parent = autoJoinerTab
 
 local mpsDropdown = Instance.new("TextButton")
-mpsDropdown.Size = UDim2.new(1, -40, 0, 40)
-mpsDropdown.Position = UDim2.new(0, 20, 0, 135)
+mpsDropdown.Size = UDim2.new(1, 0, 0, 40)
+mpsDropdown.Position = UDim2.new(0, 0, 0, 75)
 mpsDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 mpsDropdown.BorderSizePixel = 0
 mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -188,26 +243,26 @@ mpsDropdown.Font = Enum.Font.GothamBold
 mpsDropdown.TextSize = 18
 mpsDropdown.Text = "1M-3M  ▼"
 mpsDropdown.AutoButtonColor = false
-mpsDropdown.Parent = frame
+mpsDropdown.Parent = autoJoinerTab
 
 local optionsFrame = Instance.new("Frame")
-optionsFrame.Size = UDim2.new(1, -40, 0, 0)
-optionsFrame.Position = UDim2.new(0, 20, 0, 175)
+optionsFrame.Size = UDim2.new(1, 0, 0, 0)
+optionsFrame.Position = UDim2.new(0, 0, 0, 115)
 optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 optionsFrame.BorderSizePixel = 0
 optionsFrame.ClipsDescendants = true
 optionsFrame.ZIndex = 2
-optionsFrame.Parent = frame
+optionsFrame.Parent = autoJoinerTab
 
 local mpsRanges = {"1M-3M", "3M-5M", "5M+"}
 local isDropdownOpen = false
 
 local function toggleDropdown()
     if isDropdownOpen then
-        optionsFrame:TweenSize(UDim2.new(1, -40, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        optionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▼"
     else
-        optionsFrame:TweenSize(UDim2.new(1, -40, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        optionsFrame:TweenSize(UDim2.new(1, 0, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▲"
     end
     isDropdownOpen = not isDropdownOpen
@@ -240,8 +295,8 @@ end
 
 -- Start Button
 local startBtn = Instance.new("TextButton")
-startBtn.Size = UDim2.new(1, -40, 0, 40)
-startBtn.Position = UDim2.new(0, 20, 0, 320)
+startBtn.Size = UDim2.new(1, 0, 0, 40)
+startBtn.Position = UDim2.new(0, 0, 0, 160)
 startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 startBtn.BorderSizePixel = 0
 startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -249,12 +304,12 @@ startBtn.Font = Enum.Font.GothamBold
 startBtn.TextSize = 20
 startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
-startBtn.Parent = frame
+startBtn.Parent = autoJoinerTab
 
 -- Stop Button
 local stopBtn = Instance.new("TextButton")
-stopBtn.Size = UDim2.new(1, -40, 0, 40)
-stopBtn.Position = UDim2.new(0, 20, 0, 370)
+stopBtn.Size = UDim2.new(1, 0, 0, 40)
+stopBtn.Position = UDim2.new(0, 0, 0, 210)
 stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 stopBtn.BorderSizePixel = 0
 stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -262,12 +317,12 @@ stopBtn.Font = Enum.Font.GothamBold
 stopBtn.TextSize = 20
 stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
-stopBtn.Parent = frame
+stopBtn.Parent = autoJoinerTab
 
 -- Resume Button
 local resumeBtn = Instance.new("TextButton")
-resumeBtn.Size = UDim2.new(1, -40, 0, 40)
-resumeBtn.Position = UDim2.new(0, 20, 0, 420)
+resumeBtn.Size = UDim2.new(1, 0, 0, 40)
+resumeBtn.Position = UDim2.new(0, 0, 0, 260)
 resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 resumeBtn.BorderSizePixel = 0
 resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -275,7 +330,112 @@ resumeBtn.Font = Enum.Font.GothamBold
 resumeBtn.TextSize = 20
 resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
-resumeBtn.Parent = frame
+resumeBtn.Parent = autoJoinerTab
+
+-- Utilities Tab Content
+local utilitiesTab = Instance.new("Frame")
+utilitiesTab.Size = UDim2.new(1, 0, 1, 0)
+utilitiesTab.BackgroundTransparency = 1
+utilitiesTab.Visible = false
+utilitiesTab.Parent = tabContentContainer
+tabContents["Utilities"] = utilitiesTab
+
+-- Utilities Title
+local utilitiesTitle = Instance.new("TextLabel")
+utilitiesTitle.Size = UDim2.new(1, 0, 0, 30)
+utilitiesTitle.Position = UDim2.new(0, 0, 0, 0)
+utilitiesTitle.BackgroundTransparency = 1
+utilitiesTitle.Text = "Utilities"
+utilitiesTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
+utilitiesTitle.Font = Enum.Font.GothamBold
+utilitiesTitle.TextSize = 22
+utilitiesTitle.TextXAlignment = Enum.TextXAlignment.Left
+utilitiesTitle.Parent = utilitiesTab
+
+-- Rejoin Button
+local rejoinBtn = Instance.new("TextButton")
+rejoinBtn.Size = UDim2.new(1, 0, 0, 40)
+rejoinBtn.Position = UDim2.new(0, 0, 0, 40)
+rejoinBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+rejoinBtn.BorderSizePixel = 0
+rejoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+rejoinBtn.Font = Enum.Font.GothamBold
+rejoinBtn.TextSize = 18
+rejoinBtn.Text = "Rejoin Server"
+rejoinBtn.AutoButtonColor = false
+rejoinBtn.Parent = utilitiesTab
+
+rejoinBtn.MouseButton1Click:Connect(function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+end)
+
+-- Server Hop Button
+local serverHopBtn = Instance.new("TextButton")
+serverHopBtn.Size = UDim2.new(1, 0, 0, 40)
+serverHopBtn.Position = UDim2.new(0, 0, 0, 90)
+serverHopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+serverHopBtn.BorderSizePixel = 0
+serverHopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+serverHopBtn.Font = Enum.Font.GothamBold
+serverHopBtn.TextSize = 18
+serverHopBtn.Text = "Server Hop"
+serverHopBtn.AutoButtonColor = false
+serverHopBtn.Parent = utilitiesTab
+
+serverHopBtn.MouseButton1Click:Connect(function()
+    TeleportService:Teleport(game.PlaceId, player)
+end)
+
+-- FPS Boost Button
+local fpsBoostBtn = Instance.new("TextButton")
+fpsBoostBtn.Size = UDim2.new(1, 0, 0, 40)
+fpsBoostBtn.Position = UDim2.new(0, 0, 0, 140)
+fpsBoostBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+fpsBoostBtn.BorderSizePixel = 0
+fpsBoostBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+fpsBoostBtn.Font = Enum.Font.GothamBold
+fpsBoostBtn.TextSize = 18
+fpsBoostBtn.Text = "Toggle FPS Boost"
+fpsBoostBtn.AutoButtonColor = false
+fpsBoostBtn.Parent = utilitiesTab
+
+local fpsBoostEnabled = false
+fpsBoostBtn.MouseButton1Click:Connect(function()
+    fpsBoostEnabled = not fpsBoostEnabled
+    if fpsBoostEnabled then
+        -- Simple FPS boost by reducing graphics quality
+        settings().Rendering.QualityLevel = 1
+        fpsBoostBtn.Text = "FPS Boost: ON"
+        fpsBoostBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+    else
+        settings().Rendering.QualityLevel = 10
+        fpsBoostBtn.Text = "FPS Boost: OFF"
+        fpsBoostBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
+-- Tab Switching Function
+local function switchTab(tabName)
+    currentTab = tabName
+    for name, tab in pairs(tabContents) do
+        tab.Visible = (name == tabName)
+    end
+    
+    -- Update tab button colors
+    for _, btn in ipairs(tabButtons) do
+        if btn.Text == tabName then
+            btn.BackgroundColor3 = Color3.fromRGB(90, 0, 90)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
+end
+
+-- Connect tab buttons
+autoJoinerTabBtn.MouseButton1Click:Connect(function() switchTab("AutoJoiner") end)
+secondTabBtn.MouseButton1Click:Connect(function() switchTab("Utilities") end)
 
 -- Minimize Button
 local minimizeBtn = Instance.new("ImageButton")
@@ -477,6 +637,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
+        print("Current Tab:", currentTab)
         print("=========================")
     end
 end)
