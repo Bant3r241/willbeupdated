@@ -814,3 +814,14 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
+-- Auto-execute functionality
+local function autoExecute()
+    if autoLoadToggle.Text == "ON" then
+        isRunning = true
+        connectWebSocket()
+    end
+end
+
+-- Run auto-execute after a short delay to ensure everything is loaded
+task.delay(1, autoExecute)
