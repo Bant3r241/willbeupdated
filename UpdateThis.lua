@@ -66,30 +66,11 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 500) -- Reduced height since we removed auto-load
+frame.Size = UDim2.new(0, 300, 0, 500) -- Reduced height
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
-
-
-local othersTab = Instance.new("Frame")
-othersTab.Size = UDim2.new(1, 0, 1, 0)
-othersTab.BackgroundTransparency = 1
-othersTab.Visible = false
-othersTab.Parent = tabContentContainer
-tabContents["Others"] = othersTab
-
-local othersTitle = Instance.new("TextLabel")
-othersTitle.Size = UDim2.new(1, 0, 0, 30)
-othersTitle.Position = UDim2.new(0, 0, 0, 0)
-othersTitle.BackgroundTransparency = 1
-othersTitle.Text = "Other Utilities"
-othersTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
-othersTitle.Font = Enum.Font.GothamBold
-othersTitle.TextSize = 22
-othersTitle.TextXAlignment = Enum.TextXAlignment.Left
-othersTitle.Parent = othersTab
 
 -- Draggable Logic
 local dragging, dragInput, dragStart, startPos
@@ -221,7 +202,7 @@ othersTabBtn.Parent = tabsContainer
 table.insert(tabButtons, othersTabBtn)
 
 local tabContentContainer = Instance.new("Frame")
-tabContentContainer.Size = UDim2.new(1, -40, 0, 450)
+tabContentContainer.Size = UDim2.new(1, -40, 0, 410) -- Adjusted height
 tabContentContainer.Position = UDim2.new(0, 20, 0, 95)
 tabContentContainer.BackgroundTransparency = 1
 tabContentContainer.ClipsDescendants = true
@@ -362,7 +343,7 @@ resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
 resumeBtn.Parent = autoJoinerTab
 
--- Others Tab Content (Removed Auto-Load Section)
+-- Others Tab Content
 local othersTab = Instance.new("Frame")
 othersTab.Size = UDim2.new(1, 0, 1, 0)
 othersTab.BackgroundTransparency = 1
@@ -439,7 +420,7 @@ fpsBoostBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- BrainRot Filter System (Moved up to replace auto-load space)
+-- BrainRot Filter System
 local brainRotLabel = Instance.new("TextLabel")
 brainRotLabel.Size = UDim2.new(1, 0, 0, 20)
 brainRotLabel.Position = UDim2.new(0, 0, 0, 190)
@@ -472,7 +453,6 @@ brainRotOptionsFrame.ClipsDescendants = true
 brainRotOptionsFrame.ZIndex = 2
 brainRotOptionsFrame.Parent = othersTab
 
--- Create a ScrollingFrame to contain the options
 local brainRotScrollingFrame = Instance.new("ScrollingFrame")
 brainRotScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
 brainRotScrollingFrame.Position = UDim2.new(0, 0, 0, 0)
@@ -516,30 +496,6 @@ for i, brainRot in ipairs(brainRotOptions) do
     end)
 end
 
--- Auto-Load Toggle
-local autoLoadLabel = Instance.new("TextLabel")
-autoLoadLabel.Size = UDim2.new(1, 0, 0, 20)
-autoLoadLabel.Position = UDim2.new(0, 0, 0, 310)
-autoLoadLabel.BackgroundTransparency = 1
-autoLoadLabel.Text = "Auto-Load Script:"
-autoLoadLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoLoadLabel.Font = Enum.Font.GothamBold
-autoLoadLabel.TextSize = 18
-autoLoadLabel.TextXAlignment = Enum.TextXAlignment.Left
-autoLoadLabel.Parent = othersTab
-
-local autoLoadToggle = Instance.new("TextButton")
-autoLoadToggle.Size = UDim2.new(1, 0, 0, 40)
-autoLoadToggle.Position = UDim2.new(0, 0, 0, 335)
-autoLoadToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-autoLoadToggle.BorderSizePixel = 0
-autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoLoadToggle.Font = Enum.Font.GothamBold
-autoLoadToggle.TextSize = 18
-autoLoadToggle.Text = "OFF"
-autoLoadToggle.AutoButtonColor = false
-autoLoadToggle.Parent = othersTab
-
 -- Settings Management (Simplified without auto-load)
 local function saveSettings()
     local settings = {
@@ -576,26 +532,6 @@ local function loadSettings()
     mpsDropdown.Text = selectedMpsRange.."  ▼"
     brainRotDropdown.Text = selectedBrainRot.."  ▼"
 end
-    
-    -- Debug prints to verify loaded settings
-    print("Loaded BrainRot Filter:", selectedBrainRot)
-    print("Auto-Load Status:", autoLoadToggle.Text)
-    
-    -- Update dropdown displays
-    mpsDropdown.Text = selectedMpsRange.."  ▼"
-    brainRotDropdown.Text = selectedBrainRot.."  ▼"
-end
-
-autoLoadToggle.MouseButton1Click:Connect(function()
-    if autoLoadToggle.Text == "OFF" then
-        autoLoadToggle.Text = "ON"
-        autoLoadToggle.TextColor3 = Color3.fromRGB(100, 255, 100)
-    else
-        autoLoadToggle.Text = "OFF"
-        autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    end
-    saveSettings()
-end)
 
 -- Tab Switching
 local function switchTab(tabName)
@@ -833,14 +769,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Selected BrainRot:", selectedBrainRot)
-        print("Auto-Load:", autoLoadToggle.Text)
         print("Connection Attempts:", connectionAttempts)
         print("Current Tab:", currentTab)
         print("=========================")
     end
 end)
 
--- Initialize (Removed auto-execute completely)
+-- Initialize
 loadSettings()
 switchTab("AutoJoiner")
 
@@ -850,4 +785,3 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
-
