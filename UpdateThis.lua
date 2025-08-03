@@ -1,20 +1,19 @@
 print("Script is executing!") -- Debug check
 
--- AutoJoiner v3.0 - Krnl Optimized Version
+-- AutoJoiner v3.1 - Chilli Hub Integration
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 
--- Configuration (Krnl-specific)
+-- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
 local HOP_INTERVAL = 2.5 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
-local MAX_UNAUTHORIZED_ATTEMPTS = 3
 local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field
 local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button
-local CHECK_INTERVAL = 0.3 -- Clipboard check interval
+local CHILLI_HUB_WAIT_TIME = 5 -- seconds to wait for Chilli Hub to load
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -25,29 +24,56 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
-local unauthorizedAttempts = 0
-local AUTO_PASTE_ENABLED = true
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Helper Functions (Krnl-optimized)
+-- Helper Functions
 local function isValidJobId(jobId)
     return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= 200
 end
 
-local function extractUuidFromJobId(jobId)
-    if not isValidJobId(jobId) then return nil end
+local function joinChilliHub(jobId)
+    if not isValidJobId(jobId) then return false end
     
-    local success, decoded = pcall(function()
-        return HttpService:Base64Decode(jobId)
-    end)
+    local startTime = os.time()
+    local inputField, joinButton
     
-    return success and decoded and #decoded >= 16 and decoded:sub(1, 16) or nil
+    -- Wait for Chilli Hub to load
+    while os.time() - startTime < CHILLI_HUB_WAIT_TIME do
+        -- Find the input field and join button
+        inputField = playerGui:FindFirstChild(CHILLI_HUB_INPUT_NAME, true) or
+                   playerGui:FindFirstChild("JobIDInput", true) or
+                   playerGui:FindFirstChild("JobIdInput", true)
+        
+        joinButton = playerGui:FindFirstChild(CHILLI_HUB_JOIN_NAME, true) or
+                   playerGui:FindFirstChild("JoinButton", true) or
+                   playerGui:FindFirstChild("JoinBtn", true)
+        
+        if inputField and joinButton then break end
+        task.wait(0.5)
+    end
+    
+    if not inputField or not joinButton then
+        warn("Chilli Hub elements not found")
+        return false
+    end
+    
+    -- Set the job ID
+    inputField.Text = jobId
+    task.wait(0.2) -- Small delay to ensure text is set
+    
+    -- Click the join button
+    if joinButton:IsA("TextButton") then
+        joinButton:Fire("MouseButton1Click")
+        return true
+    end
+    
+    return false
 end
 
--- GUI Creation with Krnl fixes
+-- GUI Creation
 do
     -- First remove any existing GUI
     pcall(function()
@@ -65,7 +91,7 @@ do
     screenGui.Parent = game:GetService("CoreGui")
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 600)
+    frame.Size = UDim2.new(0, 300, 0, 550)
     frame.Position = UDim2.new(0.5, -150, 0.3, 0)
     frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     frame.BorderSizePixel = 0
@@ -296,46 +322,6 @@ do
     resumeBtn.AutoButtonColor = false
     resumeBtn.Parent = frame
 
-    -- Chilli Hub Auto-Join Section
-    local pasteFrame = Instance.new("Frame")
-    pasteFrame.Size = UDim2.new(1, -40, 0, 80)
-    pasteFrame.Position = UDim2.new(0, 20, 0, 470)
-    pasteFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    pasteFrame.BorderSizePixel = 0
-    pasteFrame.Parent = frame
-
-    local pasteTitle = Instance.new("TextLabel")
-    pasteTitle.Size = UDim2.new(1, 0, 0, 20)
-    pasteTitle.Position = UDim2.new(0, 0, 0, 0)
-    pasteTitle.BackgroundTransparency = 1
-    pasteTitle.Text = "Chilli Hub Auto-Join"
-    pasteTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    pasteTitle.Font = Enum.Font.GothamBold
-    pasteTitle.TextSize = 16
-    pasteTitle.Parent = pasteFrame
-
-    local pasteStatus = Instance.new("TextLabel")
-    pasteStatus.Size = UDim2.new(1, 0, 0, 20)
-    pasteStatus.Position = UDim2.new(0, 0, 0, 25)
-    pasteStatus.BackgroundTransparency = 1
-    pasteStatus.Text = "Status: Ready"
-    pasteStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    pasteStatus.Font = Enum.Font.Gotham
-    pasteStatus.TextSize = 14
-    pasteStatus.Parent = pasteFrame
-
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Size = UDim2.new(1, 0, 0, 30)
-    toggleButton.Position = UDim2.new(0, 0, 0, 50)
-    toggleButton.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
-    toggleButton.BorderSizePixel = 0
-    toggleButton.Text = AUTO_PASTE_ENABLED and "AUTO-JOIN: ON" or "AUTO-JOIN: OFF"
-    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.TextSize = 16
-    toggleButton.AutoButtonColor = false
-    toggleButton.Parent = pasteFrame
-
     -- Minimize Button
     local minimizeBtn = Instance.new("ImageButton")
     minimizeBtn.Size = UDim2.new(0, 40, 0, 40)
@@ -362,110 +348,10 @@ do
         frame.Visible = true
         minimizedImage.Visible = false
     end)
-
-    -- Emergency GUI visibility check
-    task.spawn(function()
-        task.wait(1)
-        if not frame.Visible then
-            warn("GUI not visible - forcing visibility")
-            screenGui.Enabled = true
-            frame.Visible = true
-        end
-        print("GUI should be visible now at:", frame.AbsolutePosition)
-    end)
 end
-
--- Chilli Hub Functions (Krnl-compatible)
-local function findChilliElements()
-    local inputField, joinButton
-    
-    for _, gui in ipairs(playerGui:GetDescendants()) do
-        if not inputField and gui:IsA("TextBox") then
-            if gui.Name == CHILLI_HUB_INPUT_NAME or string.find(gui.Name:lower(), "jobid") then
-                inputField = gui
-            end
-        end
-        
-        if not joinButton and gui:IsA("TextButton") then
-            if gui.Name == CHILLI_HUB_JOIN_NAME or string.find(gui.Text:lower(), "join job") then
-                joinButton = gui
-            end
-        end
-        
-        if inputField and joinButton then break end
-    end
-    
-    return inputField, joinButton
-end
-
-local function runAutoJoin()
-    local lastClipboard = ""
-    
-    while AUTO_PASTE_ENABLED do
-        task.wait(CHECK_INTERVAL)
-        
-        local currentClip = readclipboard() or ""
-        
-        if currentClip == lastClipboard or not isValidJobId(currentClip) then
-            if currentClip ~= lastClipboard then
-                pasteStatus.Text = "Status: Invalid Job ID"
-                pasteStatus.TextColor3 = Color3.fromRGB(255, 150, 150)
-                lastClipboard = currentClip
-            end
-            goto continue
-        end
-        
-        lastClipboard = currentClip
-        pasteStatus.Text = "Status: Processing..."
-        pasteStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
-        
-        local inputField, joinButton = findChilliElements()
-        
-        if not inputField then
-            pasteStatus.Text = "Status: Input not found"
-            pasteStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
-            goto continue
-        end
-        
-        if not joinButton then
-            pasteStatus.Text = "Status: Join button not found"
-            pasteStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
-            goto continue
-        end
-        
-        pcall(function()
-            inputField.Text = currentClip
-            pasteStatus.Text = "Status: Pasted Job ID"
-            pasteStatus.TextColor3 = Color3.fromRGB(150, 255, 150)
-            
-            task.wait(0.2)
-            
-            joinButton:Fire("MouseButton1Click")
-            pasteStatus.Text = "Status: Joined server!"
-            pasteStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-            
-            task.wait(2)
-        end)
-        
-        ::continue::
-    end
-end
-
-toggleButton.MouseButton1Click:Connect(function()
-    AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
-    toggleButton.Text = AUTO_PASTE_ENABLED and "AUTO-JOIN: ON" or "AUTO-JOIN: OFF"
-    toggleButton.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
-    
-    if AUTO_PASTE_ENABLED then
-        coroutine.wrap(runAutoJoin)()
-    else
-        pasteStatus.Text = "Status: Paused"
-        pasteStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    end
-end)
 
 -- Teleport Functions
-local function attemptTeleport(jobId, isHighValue)
+local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
     if not isValidJobId(jobId) then return false end
     
@@ -479,76 +365,29 @@ local function attemptTeleport(jobId, isHighValue)
     
     lastHopTime = os.time()
     activeJobId = jobId
+    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
     
-    local teleportId = jobId
-    local method = "Full"
-    local attemptCount = 1
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+    end)
     
-    if not isHighValue then
-        local uuid = extractUuidFromJobId(jobId)
-        if uuid then
-            teleportId = uuid
-            method = "UUID"
-        else
-            statusLabel.Text = "Status: Failed to extract UUID"
-            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            return false
-        end
+    if not success then
+        warn("Teleport failed:", err)
+        statusLabel.Text = "Status: Failed - Retrying"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false
     end
     
-    serverInfoLabel.Text = string.format("Server: %s... [%s]", string.sub(jobId, 1, 8), method)
-    
-    while attemptCount <= 2 do
-        local success, result = pcall(function()
-            return TeleportService:TeleportToPlaceInstance(game.PlaceId, teleportId, player)
-        end)
-        
-        if success and result == true then
-            statusLabel.Text = string.format("Joined %s...", string.sub(jobId, 1, 8))
-            statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            unauthorizedAttempts = 0
-            return true
-        end
-        
-        if not success then
-            local err = tostring(result)
-            
-            if string.find(err, "Unauthorized") then
-                unauthorizedAttempts = unauthorizedAttempts + 1
-                if unauthorizedAttempts >= MAX_UNAUTHORIZED_ATTEMPTS then
-                    statusLabel.Text = "Status: Too many fails - Paused"
-                    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-                    isPaused = true
-                    return false
-                end
-                
-                statusLabel.Text = string.format("Retry %d/%d...", unauthorizedAttempts, MAX_UNAUTHORIZED_ATTEMPTS)
-                statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-                
-                if method == "UUID" and attemptCount == 1 then
-                    teleportId = jobId
-                    method = "Full"
-                    statusLabel.Text = statusLabel.Text .. " (Trying Full ID)"
-                end
-                
-                task.wait(1)
-            else
-                statusLabel.Text = "Status: Error - " .. string.sub(err, 1, 30)
-                statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-                return false
-            end
-        end
-        
-        attemptCount = attemptCount + 1
-    end
-    
-    return false
+    return true
 end
 
--- WebSocket Functions (Krnl-compatible)
+-- WebSocket Functions
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
+    print("[WebSocket] Raw message:", message)
+    
+    -- Parse JSON message
     local success, data = pcall(function()
         return HttpService:JSONDecode(message)
     end)
@@ -556,45 +395,70 @@ local function handleWebSocketMessage(message)
     if not success then
         statusLabel.Text = "Status: Invalid JSON"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse JSON:", message)
         return
     end
     
+    -- Extract data from JSON
     local jobId = data.jobId
+    local serverName = data.serverName
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
-    local mps = tonumber(mpsText) or 0
     
+    -- Validate required fields
     if not jobId or not mpsText then
         statusLabel.Text = "Status: Missing data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+        return
+    end
+    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        statusLabel.Text = "Status: Invalid MPS value"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
     
-    local isHighValue = (mps >= 10)
+    -- Apply MPS filter
     local shouldJoin = false
-    local actionText = "Skipping"
-    
-    if selectedMpsRange == "1M-3M" and mps >= 1 and mps <= 3 then
-        shouldJoin = true
-        actionText = "Joining [UUID]"
-    elseif selectedMpsRange == "3M-5M" and mps > 3 and mps <= 5 then
-        shouldJoin = true
-        actionText = "Joining [UUID]"
-    elseif selectedMpsRange == "5M-9.9M" and mps > 5 and mps <= 9.9 then
-        shouldJoin = true
-        actionText = "Joining [UUID]"
-    elseif selectedMpsRange == "10M+" and mps >= 10 then
-        shouldJoin = true
-        actionText = "Joining [Full]"
+    local useChilliHub = false
+    local mpsMillions = mps -- Already in millions
+
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+    elseif selectedMpsRange == "5M-9.9M" then
+        shouldJoin = (mpsMillions > 5 and mpsMillions <= 9.9)
+    elseif selectedMpsRange == "10M+" then
+        shouldJoin = (mpsMillions >= 10)
+        useChilliHub = true -- Use Chilli Hub for 10M+ servers
     end
     
+    -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("%s %s (%.1fM/s)", actionText, string.sub(jobId, 1, 8), mps)
+        statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId, isHighValue)
+        
+        if useChilliHub then
+            if joinChilliHub(jobId) then
+                print("Using Chilli Hub to join 10M+ server")
+            else
+                -- Fallback to normal teleport if Chilli Hub fails
+                attemptTeleport(jobId)
+            end
+        else
+            attemptTeleport(jobId)
+        end
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mps)
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
+    
+    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | Action: %s | Method: %s",
+        jobId, serverName or "N/A", mpsMillions, shouldJoin and "Joining" or "Skipping",
+        useChilliHub and "Chilli Hub" or "Direct Teleport"))
 end
 
 local function connectWebSocket()
@@ -610,8 +474,7 @@ local function connectWebSocket()
     end
     
     local success, err = pcall(function()
-        -- Krnl-specific WebSocket connection
-        socket = websocket.connect(WEBSOCKET_URL)
+        socket = WebSocket.connect(WEBSOCKET_URL)
         
         socket.OnMessage:Connect(handleWebSocketMessage)
         
@@ -628,6 +491,7 @@ local function connectWebSocket()
     end)
     
     if not success then
+        print("[ERROR] Connection failed:", err)
         if connectionAttempts < MAX_RETRIES then
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
@@ -646,9 +510,6 @@ startBtn.MouseButton1Click:Connect(function()
     isPaused = false
     connectionAttempts = 0
     connectWebSocket()
-    if AUTO_PASTE_ENABLED then
-        coroutine.wrap(runAutoJoin)()
-    end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -674,13 +535,13 @@ end)
 UserInputService.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.F5 then
         print("\n=== DEBUG INFO ===")
-        print("WebSocket:", socket and "Connected" or "Disconnected")
+        print("WebSocket URL:", WEBSOCKET_URL)
+        print("Connected:", socket and "Yes" or "No")
         print("Running:", isRunning and "Yes" or "No")
         print("Paused:", isPaused and "Yes" or "No")
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
-        print("Auto-Paste:", AUTO_PASTE_ENABLED and "ON" or "OFF")
         print("=========================")
     end
 end)
@@ -691,11 +552,6 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
-
--- Start auto-join if enabled
-if AUTO_PASTE_ENABLED then
-    coroutine.wrap(runAutoJoin)()
-end
 
 -- Final GUI visibility check
 task.spawn(function()
@@ -708,4 +564,4 @@ task.spawn(function()
     end
 end)
 
-print("AutoJoiner fully initialized!")
+print("AutoJoiner fully initialized with Chilli Hub support!")
