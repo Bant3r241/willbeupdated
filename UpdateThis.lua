@@ -1,4 +1,4 @@
-print("AutoJoiner v3.6 - Complete Integration")
+print("AutoJoiner v3.7 - Complete Integration")
 
 -- Services
 local Players = game:GetService("Players")
@@ -16,25 +16,6 @@ local CHECK_INTERVAL = 0.3 -- Clipboard check interval
 local MAX_CLIPBOARD_LENGTH = 200 -- Prevent excessively long strings
 local MAX_PASTE_ATTEMPTS = 5 -- Max attempts to paste to Chilli Hub
 local ELEMENT_WAIT_TIME = 0.5 -- Time between element detection attempts
-
--- Device Detection
-local IS_ANDROID = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
-local IS_EMULATOR = false
-
-local function checkForEmulator()
-    if IS_ANDROID then
-        local emulatorKeywords = {"bluestacks", "memu", "nox", "ldplayer", "gameloop", "genymotion"}
-        local deviceInfo = tostring(os.getenv("ANDROID_ROOT") or ""):lower()
-        
-        for _, keyword in ipairs(emulatorKeywords) do
-            if deviceInfo:find(keyword) then
-                IS_EMULATOR = true
-                break
-            end
-        end
-    end
-    return IS_EMULATOR
-end
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -54,12 +35,22 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- Helper Functions
 local function isValidJobId(jobId)
+    -- More flexible validation that handles special characters
     return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= MAX_CLIPBOARD_LENGTH
 end
 
 -- Enhanced Clipboard Functions
 local function updateClipboardStatus()
-    local currentClip = readclipboard() or ""
+    local success, currentClip = pcall(function()
+        return readclipboard() or ""
+    end)
+    
+    if not success then
+        clipboardStatus.Text = "Clipboard: Access Error"
+        clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
+        return
+    end
+    
     if currentClip == "" then
         clipboardStatus.Text = "Clipboard: Empty"
         clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -73,31 +64,43 @@ local function updateClipboardStatus()
 end
 
 local function monitorClipboard()
+    print("Clipboard monitoring started")
     while AUTO_PASTE_ENABLED and isRunning do
-        local currentClip = readclipboard() or ""
-        updateClipboardStatus()
+        local success, currentClip = pcall(function()
+            return readclipboard() or ""
+        end)
+        
+        if success then
+            print("Clipboard content:", #currentClip > 50 and string.sub(currentClip,1,50).."..." or currentClip)
+            updateClipboardStatus()
 
-        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-            lastClipboard = currentClip
-            clipboardStatus.Text = "Processing Job ID..."
-            clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
-            
-            local success = joinChilliHub(currentClip)
-            if success then
-                clipboardStatus.Text = "Joined successfully!"
-                clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-                writeclipboard("")
-                lastClipboard = ""
-            else
-                clipboardStatus.Text = "Failed - Trying teleport"
-                clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
-                attemptTeleport(currentClip)
+            if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+                lastClipboard = currentClip
+                clipboardStatus.Text = "Processing Job ID..."
+                clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
+                
+                local success = joinChilliHub(currentClip)
+                if success then
+                    clipboardStatus.Text = "Joined successfully!"
+                    clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+                    pcall(function() writeclipboard("") end)
+                    lastClipboard = ""
+                else
+                    clipboardStatus.Text = "Failed - Trying teleport"
+                    clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
+                    attemptTeleport(currentClip)
+                end
             end
+        else
+            warn("Failed to read clipboard:", currentClip)
+            clipboardStatus.Text = "Clipboard: Access Error"
+            clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
         end
         
         task.wait(CHECK_INTERVAL)
     end
 end
+
 
 local function findFirstMatchingElement(parent, className, matchFunction)
     for _, child in ipairs(parent:GetDescendants()) do
@@ -716,12 +719,11 @@ task.spawn(function()
     end
 end)
 
--- Initialize
-checkForEmulator()
-print("AutoJoiner initialized!")
-print("Running on:", IS_ANDROID and "Android" or "Desktop", IS_EMULATOR and "(Emulator)" or "(Real Device)")
 
--- Start clipboard monitoring
+-- Initialize
+print("AutoJoiner initialized with enhanced clipboard monitoring!")
+
+-- Start continuous clipboard status updates
 coroutine.wrap(function()
     while true do
         updateClipboardStatus()
@@ -729,9 +731,21 @@ coroutine.wrap(function()
     end
 end)()
 
+-- Start clipboard monitoring if enabled
 if AUTO_PASTE_ENABLED then
+    clipboardStatus.Text = "Clipboard: Monitoring"
     coroutine.wrap(function()
-        task.wait(1)
+        task.wait(1) -- Small delay before active monitoring begins
         monitorClipboard()
     end)()
 end
+
+-- Debug command to test with specific Job ID
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.F6 then
+        local testID = "TNmMNbvB8tkUtxOVLRuP9ZNLItPPfpvHTHvB9tmCyLPVRRvQIHDVSZuBxLUBwjORqHPUSfNVNbkTuO3Y4xvPSAFN+HkUqHys"
+        print("Testing with ID:", testID)
+        attemptTeleport(testID)
+    end
+end)
+
