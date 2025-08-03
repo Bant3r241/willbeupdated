@@ -355,7 +355,6 @@ local othersTitle = Instance.new("TextLabel")
 othersTitle.Size = UDim2.new(1, 0, 0, 30)
 othersTitle.Position = UDim2.new(0, 0, 0, 0)
 othersTitle.BackgroundTransparency = 1
-othersTitle.Text = "Other Utilities"
 othersTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
 othersTitle.Font = Enum.Font.GothamBold
 othersTitle.TextSize = 22
@@ -785,3 +784,4 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
