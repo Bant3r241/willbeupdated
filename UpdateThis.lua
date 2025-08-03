@@ -1,4 +1,4 @@
--- Multi-Tab AutoJoiner with BrainRot Filter
+-- Multi-Tab AutoJoiner with BrainRot Filter and Auto-Load
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -19,9 +19,25 @@ local isPaused = false
 local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
-local selectedBrainRot = "Any" -- Default to any brainrot
+local selectedBrainRot = "Any"
 local connectionAttempts = 0
-local currentTab = "AutoJoiner" -- Current active tab
+local currentTab = "AutoJoiner"
+
+-- BrainRot Detection Function
+local function detectBrainRot(serverName)
+    if not serverName then return "Unknown" end
+    serverName = serverName:lower()
+    
+    if string.find(serverName, "vacca") or string.find(serverName, "saturno") then
+        return "La Vacca Saturno Saturnita"
+    elseif string.find(serverName, "grappe") or string.find(serverName, "medussi") then
+        return "Grappe Medussi"
+    elseif string.find(serverName, "tralaleritos") then
+        return "Los Tralaleritos"
+    end
+    
+    return "Unknown"
+end
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -40,7 +56,7 @@ frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
--- Draggable Logic (same as before)
+-- Draggable Logic
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
@@ -79,18 +95,17 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Rainbow Title Animation (same as before)
+-- Rainbow Title Animation
 local rainbowColors = {
-    Color3.fromRGB(255, 0, 0),    -- Red
-    Color3.fromRGB(255, 127, 0),  -- Orange
-    Color3.fromRGB(255, 255, 0),  -- Yellow
-    Color3.fromRGB(0, 255, 0),    -- Green
-    Color3.fromRGB(0, 0, 255),    -- Blue
-    Color3.fromRGB(75, 0, 130),   -- Indigo
-    Color3.fromRGB(148, 0, 211)   -- Violet
+    Color3.fromRGB(255, 0, 0),
+    Color3.fromRGB(255, 127, 0),
+    Color3.fromRGB(255, 255, 0),
+    Color3.fromRGB(0, 255, 0),
+    Color3.fromRGB(0, 0, 255),
+    Color3.fromRGB(75, 0, 130),
+    Color3.fromRGB(148, 0, 211)
 }
 
--- Advanced Per-Character Rainbow Wave Title (same as before)
 local titleContainer = Instance.new("Frame")
 titleContainer.Size = UDim2.new(1, -40, 0, 40)
 titleContainer.Position = UDim2.new(0, 20, 0, 15)
@@ -99,7 +114,7 @@ titleContainer.Parent = frame
 
 local titleText = "AutoJoiner"
 local charLabels = {}
-local charWidth = 18 -- Width of each character
+local charWidth = 18
 local totalWidth = #titleText * charWidth
 
 for i = 1, #titleText do
@@ -118,7 +133,7 @@ end
 
 titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
 
-local waveSpeed = 0.5 -- Speed of the wave effect
+local waveSpeed = 0.5
 local waveOffset = 0
 
 local function startAdvancedRainbowWave()
@@ -138,14 +153,12 @@ coroutine.wrap(startAdvancedRainbowWave)()
 local tabButtons = {}
 local tabContents = {}
 
--- Create tab buttons container
 local tabsContainer = Instance.new("Frame")
 tabsContainer.Size = UDim2.new(1, -40, 0, 30)
 tabsContainer.Position = UDim2.new(0, 20, 0, 60)
 tabsContainer.BackgroundTransparency = 1
 tabsContainer.Parent = frame
 
--- AutoJoiner Tab Button
 local autoJoinerTabBtn = Instance.new("TextButton")
 autoJoinerTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
 autoJoinerTabBtn.Position = UDim2.new(0, 0, 0, 0)
@@ -159,7 +172,6 @@ autoJoinerTabBtn.AutoButtonColor = false
 autoJoinerTabBtn.Parent = tabsContainer
 table.insert(tabButtons, autoJoinerTabBtn)
 
--- Others Tab Button
 local othersTabBtn = Instance.new("TextButton")
 othersTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
 othersTabBtn.Position = UDim2.new(0.5, 5, 0, 0)
@@ -173,7 +185,6 @@ othersTabBtn.AutoButtonColor = false
 othersTabBtn.Parent = tabsContainer
 table.insert(tabButtons, othersTabBtn)
 
--- Create tab content frames
 local tabContentContainer = Instance.new("Frame")
 tabContentContainer.Size = UDim2.new(1, -40, 0, 450)
 tabContentContainer.Position = UDim2.new(0, 20, 0, 95)
@@ -181,14 +192,13 @@ tabContentContainer.BackgroundTransparency = 1
 tabContentContainer.ClipsDescendants = true
 tabContentContainer.Parent = frame
 
--- AutoJoiner Tab Content (same as before)
+-- AutoJoiner Tab Content
 local autoJoinerTab = Instance.new("Frame")
 autoJoinerTab.Size = UDim2.new(1, 0, 1, 0)
 autoJoinerTab.BackgroundTransparency = 1
 autoJoinerTab.Parent = tabContentContainer
 tabContents["AutoJoiner"] = autoJoinerTab
 
--- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 20)
 statusLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -200,7 +210,6 @@ statusLabel.TextSize = 14
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Parent = autoJoinerTab
 
--- Server Info Label
 local serverInfoLabel = Instance.new("TextLabel")
 serverInfoLabel.Size = UDim2.new(1, 0, 0, 20)
 serverInfoLabel.Position = UDim2.new(0, 0, 0, 25)
@@ -212,7 +221,6 @@ serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 serverInfoLabel.Parent = autoJoinerTab
 
--- MPS Dropdown System (same as before)
 local mpsLabel = Instance.new("TextLabel")
 mpsLabel.Size = UDim2.new(1, 0, 0, 20)
 mpsLabel.Position = UDim2.new(0, 0, 0, 50)
@@ -283,7 +291,6 @@ for i, range in ipairs(mpsRanges) do
     end)
 end
 
--- Start Button
 local startBtn = Instance.new("TextButton")
 startBtn.Size = UDim2.new(1, 0, 0, 40)
 startBtn.Position = UDim2.new(0, 0, 0, 160)
@@ -296,7 +303,6 @@ startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
 startBtn.Parent = autoJoinerTab
 
--- Stop Button
 local stopBtn = Instance.new("TextButton")
 stopBtn.Size = UDim2.new(1, 0, 0, 40)
 stopBtn.Position = UDim2.new(0, 0, 0, 210)
@@ -309,7 +315,6 @@ stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
 stopBtn.Parent = autoJoinerTab
 
--- Resume Button
 local resumeBtn = Instance.new("TextButton")
 resumeBtn.Size = UDim2.new(1, 0, 0, 40)
 resumeBtn.Position = UDim2.new(0, 0, 0, 260)
@@ -330,7 +335,6 @@ othersTab.Visible = false
 othersTab.Parent = tabContentContainer
 tabContents["Others"] = othersTab
 
--- Others Title
 local othersTitle = Instance.new("TextLabel")
 othersTitle.Size = UDim2.new(1, 0, 0, 30)
 othersTitle.Position = UDim2.new(0, 0, 0, 0)
@@ -342,7 +346,6 @@ othersTitle.TextSize = 22
 othersTitle.TextXAlignment = Enum.TextXAlignment.Left
 othersTitle.Parent = othersTab
 
--- Rejoin Button
 local rejoinBtn = Instance.new("TextButton")
 rejoinBtn.Size = UDim2.new(1, 0, 0, 40)
 rejoinBtn.Position = UDim2.new(0, 0, 0, 40)
@@ -359,7 +362,6 @@ rejoinBtn.MouseButton1Click:Connect(function()
     TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
 end)
 
--- Server Hop Button
 local serverHopBtn = Instance.new("TextButton")
 serverHopBtn.Size = UDim2.new(1, 0, 0, 40)
 serverHopBtn.Position = UDim2.new(0, 0, 0, 90)
@@ -376,7 +378,6 @@ serverHopBtn.MouseButton1Click:Connect(function()
     TeleportService:Teleport(game.PlaceId, player)
 end)
 
--- FPS Boost Button
 local fpsBoostBtn = Instance.new("TextButton")
 fpsBoostBtn.Size = UDim2.new(1, 0, 0, 40)
 fpsBoostBtn.Position = UDim2.new(0, 0, 0, 140)
@@ -436,7 +437,7 @@ brainRotOptionsFrame.ClipsDescendants = true
 brainRotOptionsFrame.ZIndex = 2
 brainRotOptionsFrame.Parent = othersTab
 
-local brainRotOptions = {"Any", "Grappe Medussi", "Other BrainRot 1", "Other BrainRot 2"}
+local brainRotOptions = {"Any", "La Vacca Saturno Saturnita", "Grappe Medussi", "Los Tralaleritos"}
 local isBrainRotDropdownOpen = false
 
 local function toggleBrainRotDropdown()
@@ -472,7 +473,83 @@ for i, brainRot in ipairs(brainRotOptions) do
     end)
 end
 
--- Tab Switching Function
+-- Auto-Load Toggle
+local autoLoadLabel = Instance.new("TextLabel")
+autoLoadLabel.Size = UDim2.new(1, 0, 0, 20)
+autoLoadLabel.Position = UDim2.new(0, 0, 0, 310)
+autoLoadLabel.BackgroundTransparency = 1
+autoLoadLabel.Text = "Auto-Load Script:"
+autoLoadLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoLoadLabel.Font = Enum.Font.GothamBold
+autoLoadLabel.TextSize = 18
+autoLoadLabel.TextXAlignment = Enum.TextXAlignment.Left
+autoLoadLabel.Parent = othersTab
+
+local autoLoadToggle = Instance.new("TextButton")
+autoLoadToggle.Size = UDim2.new(1, 0, 0, 40)
+autoLoadToggle.Position = UDim2.new(0, 0, 0, 335)
+autoLoadToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+autoLoadToggle.BorderSizePixel = 0
+autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoLoadToggle.Font = Enum.Font.GothamBold
+autoLoadToggle.TextSize = 18
+autoLoadToggle.Text = "OFF"
+autoLoadToggle.AutoButtonColor = false
+autoLoadToggle.Parent = othersTab
+
+-- Settings Management
+local function saveSettings()
+    local settings = {
+        mpsRange = selectedMpsRange,
+        brainRot = selectedBrainRot,
+        autoLoad = autoLoadToggle.Text == "ON"
+    }
+    
+    pcall(function()
+        writefile("AutoJoinerSettings.json", HttpService:JSONEncode(settings))
+    end)
+end
+
+local function loadSettings()
+    local success, savedSettings = pcall(function()
+        return HttpService:JSONDecode(readfile("AutoJoinerSettings.json"))
+    end)
+    
+    if success and savedSettings then
+        selectedMpsRange = savedSettings.mpsRange or "1M-3M"
+        selectedBrainRot = savedSettings.brainRot or "Any"
+        if savedSettings.autoLoad then
+            autoLoadToggle.Text = "ON"
+            autoLoadToggle.TextColor3 = Color3.fromRGB(100, 255, 100)
+            isRunning = true
+            connectWebSocket()
+        end
+        
+        -- Update dropdown displays
+        mpsDropdown.Text = selectedMpsRange.."  ▼"
+        brainRotDropdown.Text = selectedBrainRot.."  ▼"
+    end
+end
+
+autoLoadToggle.MouseButton1Click:Connect(function()
+    if autoLoadToggle.Text == "OFF" then
+        autoLoadToggle.Text = "ON"
+        autoLoadToggle.TextColor3 = Color3.fromRGB(100, 255, 100)
+        isRunning = true
+        connectWebSocket()
+    else
+        autoLoadToggle.Text = "OFF"
+        autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        isRunning = false
+        if socket then
+            pcall(function() socket:Close() end)
+            socket = nil
+        end
+    end
+    saveSettings()
+end)
+
+-- Tab Switching
 local function switchTab(tabName)
     currentTab = tabName
     for name, tab in pairs(tabContents) do
@@ -493,7 +570,7 @@ end
 autoJoinerTabBtn.MouseButton1Click:Connect(function() switchTab("AutoJoiner") end)
 othersTabBtn.MouseButton1Click:Connect(function() switchTab("Others") end)
 
--- Minimize Button (same as before)
+-- Minimize Button
 local minimizeBtn = Instance.new("ImageButton")
 minimizeBtn.Size = UDim2.new(0, 40, 0, 40)
 minimizeBtn.Position = UDim2.new(1, -40, 0, 0)
@@ -520,7 +597,33 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Updated WebSocket Message Handler with BrainRot Detection
+-- WebSocket Functions
+local function attemptTeleport(jobId)
+    if not isRunning or isPaused then return false end
+    
+    local currentTime = os.time()
+    if currentTime - lastHopTime < HOP_INTERVAL then
+        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
+    end
+    
+    lastHopTime = os.time()
+    activeJobId = jobId
+    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
+    
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+    end)
+    
+    if not success then
+        warn("Teleport failed:", err)
+        statusLabel.Text = "Status: Failed - Retrying"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false
+    end
+    
+    return true
+end
+
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
@@ -543,14 +646,8 @@ local function handleWebSocketMessage(message)
     local serverName = data.serverName or "Unknown"
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
     
-    -- Detect brainrot type from server name
-    local detectedBrainRot = "Unknown"
-    if string.find(serverName:lower(), "vacca") then
-        detectedBrainRot = "La Vacca Saturno Saturnita"
-    elseif string.find(serverName:lower(), "grappe") or string.find(serverName:lower(), "medussi") then
-        detectedBrainRot = "Grappe Medussi"
-    -- Add more brainrot detection patterns as needed
-    end
+    -- Detect brainrot type
+    local detectedBrainRot = detectBrainRot(serverName)
     
     -- Validate required fields
     if not jobId or not mpsText then
@@ -577,9 +674,9 @@ local function handleWebSocketMessage(message)
         return
     end
     
-    -- Apply MPS filter (only if BrainRot matches)
+    -- Apply MPS filter
     local shouldJoin = false
-    local mpsMillions = mps -- Already in millions
+    local mpsMillions = mps
     
     if selectedMpsRange == "1M-3M" then
         shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
@@ -601,33 +698,6 @@ local function handleWebSocketMessage(message)
     
     print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainRot: %s | Action: %s",
         jobId, serverName, mpsMillions, detectedBrainRot, shouldJoin and "Joining" or "Skipping"))
-end
-
--- Rest of the functions remain the same as before
-local function attemptTeleport(jobId)
-    if not isRunning or isPaused then return false end
-    
-    local currentTime = os.time()
-    if currentTime - lastHopTime < HOP_INTERVAL then
-        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
-    end
-    
-    lastHopTime = os.time()
-    activeJobId = jobId
-    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
-    
-    local success, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
-    end)
-    
-    if not success then
-        warn("Teleport failed:", err)
-        statusLabel.Text = "Status: Failed - Retrying"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    end
-    
-    return true
 end
 
 local function connectWebSocket()
@@ -712,11 +782,16 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Selected BrainRot:", selectedBrainRot)
+        print("Auto-Load:", autoLoadToggle.Text)
         print("Connection Attempts:", connectionAttempts)
         print("Current Tab:", currentTab)
         print("=========================")
     end
 end)
+
+-- Initialize
+loadSettings()
+switchTab("AutoJoiner")
 
 -- Cleanup
 player.AncestryChanged:Connect(function(_, parent)
@@ -724,4 +799,3 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
-
