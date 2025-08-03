@@ -1,9 +1,8 @@
--- AutoJoiner v2.0 - Complete with Chilli Hub Integration and Enhanced Features
+-- AutoJoiner v2.2 - Krnl-Compatible Version
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -53,7 +52,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 600) -- Increased height for new features
+frame.Size = UDim2.new(0, 300, 0, 600)
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
@@ -350,7 +349,7 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Chilli Hub Functions
+-- Chilli Hub Functions (Krnl-compatible)
 local function findChilliElements()
     local inputField, joinButton
     
@@ -379,10 +378,7 @@ local function runAutoJoin()
     while AUTO_PASTE_ENABLED do
         task.wait(CHECK_INTERVAL)
         
-        local currentClip = ""
-        pcall(function()
-            currentClip = getclipboard() or ""
-        end)
+        local currentClip = readclipboard() or ""
         
         if currentClip == lastClipboard or not isValidJobId(currentClip) then
             if currentClip ~= lastClipboard then
@@ -523,7 +519,7 @@ local function attemptTeleport(jobId, isHighValue)
     return false
 end
 
--- WebSocket Functions
+-- WebSocket Functions (Krnl-compatible)
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
@@ -588,7 +584,7 @@ local function connectWebSocket()
     end
     
     local success, err = pcall(function()
-        socket = WebSocket.connect(WEBSOCKET_URL)
+        socket = websocket.connect(WEBSOCKET_URL) -- Krnl-specific WebSocket
         
         socket.OnMessage:Connect(handleWebSocketMessage)
         
