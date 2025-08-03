@@ -625,94 +625,89 @@ local function fetchServersHTTP()
 end
 
 local function handleServerData(message)
-    -- Process both WebSocket and HTTP messages
     if not isRunning or isPaused then
         print("[DEBUG] Ignoring message - script not running")
         return
     end
 
-    print("[Server Data] Raw message:", message)
+    print("[SERVER] Processing:", message)
 
-    -- Safely parse JSON message
+    -- Safely parse JSON with error handling
     local data
     local success, err = pcall(function()
         data = HttpService:JSONDecode(message)
     end)
     
-    if not success or not data then
+    if not success or type(data) ~= "table" then
+        warn("[ERROR] Failed to parse server data:", err)
         statusLabel.Text = "Status: Invalid server data"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse server data:", err)
         return
     end
     
-    -- Validate required fields exist
-    if not data.jobId or not data.moneyPerSec then
-        statusLabel.Text = "Status: Missing server data"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+    -- Validate required fields with type checking
+    if type(data.jobId) ~= "string" or type(data.moneyPerSec) ~= "string" then
+        warn("[ERROR] Missing or invalid jobId/moneyPerSec")
         return
     end
+
+    -- Clean and extract data
+    local jobId = tostring(data.jobId):gsub("[%s'\"]", "") -- Remove whitespace/quotes
+    local mpsText = data.moneyPerSec:match("([%d%.]+)M")
+    local serverName = data.serverName or "Unknown"
     
-    -- Extract and clean data
-    local jobId = tostring(data.jobId)
-    local serverName = tostring(data.serverName or "Unknown")
-    local mpsText = tostring(data.moneyPerSec):match("([%d%.%-]+)M")
-    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        warn("[ERROR] Invalid MPS value:", data.moneyPerSec)
+        return
+    end
+
     -- Process Job ID (supports encoded IDs)
     local processedId = processJobId(jobId)
     if not processedId then
-        statusLabel.Text = "Status: Invalid Job ID format"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Invalid Job ID:", jobId)
+        warn("[ERROR] Invalid Job ID format:", jobId)
         return
     end
-    
-    -- Convert MPS to number (handle negative values)
-    local mps = tonumber(mpsText)
-    if not mps then
-        statusLabel.Text = "Status: Invalid MPS value"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Invalid MPS value:", mpsText)
-        return
-    end
-    
+
     -- Detect brainrot type
     local detectedBrainRot = detectBrainRot(serverName)
     
-    -- Apply BrainRot filter
+    -- Apply filters
+    local shouldJoin = true
+    
+    -- BrainRot filter
     if selectedBrainRot ~= "Any" and detectedBrainRot ~= selectedBrainRot then
-        statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(processedId, 1, 8), selectedBrainRot)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-        print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(processedId, 1, 8), selectedBrainRot, detectedBrainRot))
-        return
+        print(string.format("[FILTER] Skipping %s (BrainRot: wanted %s, got %s)", 
+              string.sub(processedId, 1, 8), selectedBrainRot, detectedBrainRot))
+        shouldJoin = false
     end
     
-    -- Skip negative MPS servers
-    if mps <= 0 then
-        statusLabel.Text = string.format("Skipping %s (Negative MPS)", string.sub(processedId, 1, 8))
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-        return
-    end
-    
-    -- Apply MPS filter
-    local shouldJoin = false
-    if selectedMpsRange == "1M-3M" then
-        shouldJoin = (mps >= 1 and mps <= 3)
-    elseif selectedMpsRange == "3M-5M" then
-        shouldJoin = (mps > 3 and mps <= 5)
-    elseif selectedMpsRange == "5M+" then
-        shouldJoin = (mps > 5)
+    -- MPS filter
+    if selectedMpsRange == "1M-3M" and not (mps >= 1 and mps <= 3) then
+        print(string.format("[FILTER] Skipping %s (MPS: %.1f not in 1M-3M)", 
+              string.sub(processedId, 1, 8), mps))
+        shouldJoin = false
+    elseif selectedMpsRange == "3M-5M" and not (mps > 3 and mps <= 5) then
+        print(string.format("[FILTER] Skipping %s (MPS: %.1f not in 3M-5M)", 
+              string.sub(processedId, 1, 8), mps))
+        shouldJoin = false
+    elseif selectedMpsRange == "5M+" and not (mps > 5) then
+        print(string.format("[FILTER] Skipping %s (MPS: %.1f not >5M)", 
+              string.sub(processedId, 1, 8), mps))
+        shouldJoin = false
     end
     
     -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mps, detectedBrainRot)
+        print(string.format("[JOINING] %s (%.1fM/s %s)", 
+              string.sub(processedId, 1, 8), mps, detectedBrainRot))
+        statusLabel.Text = string.format("Joining %s...", string.sub(processedId, 1, 8))
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         attemptTeleport(processedId)
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mps, detectedBrainRot)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        print(string.format("[FILTERED] %s (%.1fM/s %s)", 
+              string.sub(processedId, 1, 8), mps, detectedBrainRot))
     end
 end
 
@@ -721,46 +716,46 @@ end
 -- =================================================================
 
 local function attemptTeleport(jobId)
-    if not isRunning or isPaused then return false end
+    if not isRunning or isPaused then 
+        print("[DEBUG] Teleport blocked - script not running or paused")
+        return false 
+    end
     
-    -- Cooldown check
+    -- Cooldown check (2-second delay between hops)
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
-        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
+        local waitTime = HOP_INTERVAL - (currentTime - lastHopTime)
+        print(string.format("[TELEPORT] Waiting %.1fs cooldown", waitTime))
+        task.wait(waitTime)
     end
 
-    -- Try both encoded and decoded versions
-    local versionsToTry = {jobId}
-    if #jobId > 50 then  -- Likely encoded
-        local decoded = decodeCustomJobId(jobId)
-        if isValidJobId(decoded) then
-            table.insert(versionsToTry, 1, decoded) -- Try decoded first
-        end
+    -- Skip if server was joined recently (30-minute memory)
+    if recentServers[jobId] then
+        print("[TELEPORT] Skipping recently joined server:", string.sub(jobId, 1, 8))
+        return false
     end
 
-    for _, idVersion in ipairs(versionsToTry) do
-        -- Skip if recently joined
-        if recentServers[idVersion] then
-            print("Skipping recently joined server:", string.sub(idVersion, 1, 8))
-            return false
-        end
+    -- Attempt teleport with error handling
+    print("[TELEPORT] Attempting to join:", string.sub(jobId, 1, 8))
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+    end)
 
-        -- Attempt teleport
-        local success, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, idVersion, player)
-        end)
-
-        if success then
-            -- Update state on success
-            lastHopTime = os.time()
-            activeJobId = idVersion
-            recentServers[idVersion] = os.time()
-            serverInfoLabel.Text = "Server: "..string.sub(idVersion, 1, 8).."..."
-            return true
-        else
-            warn("Teleport failed with", string.sub(idVersion, 1, 8), ":", err)
-        end
+    if success then
+        -- Update state on success
+        lastHopTime = os.time()
+        activeJobId = jobId
+        recentServers[jobId] = os.time()
+        serverInfoLabel.Text = "Joining: "..string.sub(jobId, 1, 8).."..."
+        print("[SUCCESS] Teleport initiated to", string.sub(jobId, 1, 8))
+        return true
+    else
+        warn("[ERROR] Teleport failed:", err)
+        statusLabel.Text = "Teleport failed!"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+        return false
     end
+end
 
     statusLabel.Text = "Status: All teleport attempts failed"
     statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
@@ -774,6 +769,7 @@ end
 local function connectWebSocket()
     if not isRunning then return end
     
+    print("[WEBSOCKET] Attempting connection...")
     connectionAttempts = connectionAttempts + 1
     statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
@@ -787,22 +783,45 @@ local function connectWebSocket()
     local success, err = pcall(function()
         socket = WebSocket.connect(WEBSOCKET_URL)
         
+        print("[WEBSOCKET] Connection established")
+        
         socket.OnMessage:Connect(function(message)
+            print("[WEBSOCKET] Received message")
             handleServerData(message)
         end)
         
         socket.OnClose:Connect(function()
+            print("[WEBSOCKET] Connection closed")
             if isRunning and not isPaused and connectionAttempts < MAX_RETRIES then
                 task.wait(RECONNECT_DELAY)
                 connectWebSocket()
             elseif isRunning then
-                -- Fallback to HTTP if WebSocket fails
                 useWebSocket = false
                 statusLabel.Text = "Status: Switching to HTTP"
                 task.wait(2)
                 fetchServersHTTP()
             end
         end)
+        
+        connectionAttempts = 0
+        useWebSocket = true
+        statusLabel.Text = "Status: Connected (WS)"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end)
+    
+    if not success then
+        warn("[WEBSOCKET] Connection failed:", err)
+        if connectionAttempts < MAX_RETRIES then
+            task.wait(RECONNECT_DELAY)
+            connectWebSocket()
+        else
+            useWebSocket = false
+            statusLabel.Text = "Status: Using HTTP Fallback"
+            task.wait(2)
+            fetchServersHTTP()
+        end
+    end
+end
         
         connectionAttempts = 0
         useWebSocket = true
@@ -950,3 +969,4 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
