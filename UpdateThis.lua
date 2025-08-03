@@ -1,4 +1,4 @@
--- Multi-Tab AutoJoiner with BrainRot Filter and Auto-Load
+-- AutoJoiner with Perfect BrainRot Detection
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -23,21 +23,37 @@ local selectedBrainRot = "Any"
 local connectionAttempts = 0
 local currentTab = "AutoJoiner"
 
--- BrainRot Detection Function
+-- Enhanced BrainRot Detection
 local function detectBrainRot(serverName)
-    if not serverName then return "Unknown" end
-    serverName = serverName:lower()
+    if not serverName or serverName == "Unknown" then return "Unknown" end
     
-    if string.find(serverName, "vacca") or string.find(serverName, "saturno") then
+    local lowerName = serverName:lower()
+    
+    -- Detection patterns for all known brainrot types
+    if string.find(lowerName, "vacca") or string.find(lowerName, "saturno") then
         return "La Vacca Saturno Saturnita"
-    elseif string.find(serverName, "grappe") or string.find(serverName, "medussi") then
-        return "Grappe Medussi"
-    elseif string.find(serverName, "tralaleritos") then
+    elseif string.find(lowerName, "tralaleritos") then
         return "Los Tralaleritos"
+    elseif string.find(lowerName, "chimpanzini") or string.find(lowerName, "spiderniti") then
+        return "Chimpanzini Spiderniti"
+    elseif string.find(lowerName, "piccione") or string.find(lowerName, "macchina") then
+        return "Piccione Macchina"
+    elseif string.find(lowerName, "grappe") or string.find(lowerName, "medussi") then
+        return "Grappe Medussi"
     end
     
     return "Unknown"
 end
+
+-- Complete list of all detectable brainrot types
+local brainRotOptions = {
+    "Any", 
+    "La Vacca Saturno Saturnita", 
+    "Los Tralaleritos", 
+    "Chimpanzini Spiderniti", 
+    "Piccione Macchina",
+    "Grappe Medussi"
+}
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -437,7 +453,6 @@ brainRotOptionsFrame.ClipsDescendants = true
 brainRotOptionsFrame.ZIndex = 2
 brainRotOptionsFrame.Parent = othersTab
 
-local brainRotOptions = {"Any", "La Vacca Saturno Saturnita", "Grappe Medussi", "Los Tralaleritos"}
 local isBrainRotDropdownOpen = false
 
 local function toggleBrainRotDropdown()
@@ -646,7 +661,7 @@ local function handleWebSocketMessage(message)
     local serverName = data.serverName or "Unknown"
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
     
-    -- Detect brainrot type
+    -- Detect brainrot type using enhanced function
     local detectedBrainRot = detectBrainRot(serverName)
     
     -- Validate required fields
@@ -674,7 +689,7 @@ local function handleWebSocketMessage(message)
         return
     end
     
-    -- Apply MPS filter
+    -- Apply MPS filter (only if BrainRot matches)
     local shouldJoin = false
     local mpsMillions = mps
     
