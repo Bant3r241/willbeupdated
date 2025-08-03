@@ -1,4 +1,4 @@
--- Multi-Tab AutoJoiner with Perfect JSON Parsing and Rainbow Title
+-- Multi-Tab AutoJoiner with BrainRot Filter
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -19,6 +19,7 @@ local isPaused = false
 local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
+local selectedBrainRot = "Any" -- Default to any brainrot
 local connectionAttempts = 0
 local currentTab = "AutoJoiner" -- Current active tab
 
@@ -39,7 +40,7 @@ frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
--- Draggable Logic
+-- Draggable Logic (same as before)
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
@@ -78,7 +79,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Rainbow Colors for Title Animation
+-- Rainbow Title Animation (same as before)
 local rainbowColors = {
     Color3.fromRGB(255, 0, 0),    -- Red
     Color3.fromRGB(255, 127, 0),  -- Orange
@@ -89,7 +90,7 @@ local rainbowColors = {
     Color3.fromRGB(148, 0, 211)   -- Violet
 }
 
--- Advanced Per-Character Rainbow Wave Title
+-- Advanced Per-Character Rainbow Wave Title (same as before)
 local titleContainer = Instance.new("Frame")
 titleContainer.Size = UDim2.new(1, -40, 0, 40)
 titleContainer.Position = UDim2.new(0, 20, 0, 15)
@@ -101,7 +102,6 @@ local charLabels = {}
 local charWidth = 18 -- Width of each character
 local totalWidth = #titleText * charWidth
 
--- Create individual labels for each character
 for i = 1, #titleText do
     local charLabel = Instance.new("TextLabel")
     charLabel.Size = UDim2.new(0, charWidth, 1, 0)
@@ -116,31 +116,22 @@ for i = 1, #titleText do
     table.insert(charLabels, charLabel)
 end
 
--- Adjust container size to fit text exactly
 titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
 
--- Rainbow wave animation variables
 local waveSpeed = 0.5 -- Speed of the wave effect
 local waveOffset = 0
 
--- Advanced wave animation function
 local function startAdvancedRainbowWave()
     while true do
-        -- Update each character's color based on its position and the wave offset
         for i, label in ipairs(charLabels) do
             local colorIndex = (i + waveOffset) % #rainbowColors + 1
             label.TextColor3 = rainbowColors[colorIndex]
         end
-        
-        -- Increment the wave offset for the next frame
         waveOffset = (waveOffset + 1) % (#rainbowColors * 2)
-        
-        -- Wait for next frame
         task.wait(waveSpeed / 10)
     end
 end
 
--- Start the animation
 coroutine.wrap(startAdvancedRainbowWave)()
 
 -- Tab System
@@ -168,19 +159,19 @@ autoJoinerTabBtn.AutoButtonColor = false
 autoJoinerTabBtn.Parent = tabsContainer
 table.insert(tabButtons, autoJoinerTabBtn)
 
--- Second Tab Button
-local secondTabBtn = Instance.new("TextButton")
-secondTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
-secondTabBtn.Position = UDim2.new(0.5, 5, 0, 0)
-secondTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-secondTabBtn.BorderSizePixel = 0
-secondTabBtn.Text = "Utilities"
-secondTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-secondTabBtn.Font = Enum.Font.GothamBold
-secondTabBtn.TextSize = 14
-secondTabBtn.AutoButtonColor = false
-secondTabBtn.Parent = tabsContainer
-table.insert(tabButtons, secondTabBtn)
+-- Others Tab Button
+local othersTabBtn = Instance.new("TextButton")
+othersTabBtn.Size = UDim2.new(0.5, -5, 1, 0)
+othersTabBtn.Position = UDim2.new(0.5, 5, 0, 0)
+othersTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+othersTabBtn.BorderSizePixel = 0
+othersTabBtn.Text = "Others"
+othersTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+othersTabBtn.Font = Enum.Font.GothamBold
+othersTabBtn.TextSize = 14
+othersTabBtn.AutoButtonColor = false
+othersTabBtn.Parent = tabsContainer
+table.insert(tabButtons, othersTabBtn)
 
 -- Create tab content frames
 local tabContentContainer = Instance.new("Frame")
@@ -190,7 +181,7 @@ tabContentContainer.BackgroundTransparency = 1
 tabContentContainer.ClipsDescendants = true
 tabContentContainer.Parent = frame
 
--- AutoJoiner Tab Content
+-- AutoJoiner Tab Content (same as before)
 local autoJoinerTab = Instance.new("Frame")
 autoJoinerTab.Size = UDim2.new(1, 0, 1, 0)
 autoJoinerTab.BackgroundTransparency = 1
@@ -221,7 +212,7 @@ serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 serverInfoLabel.Parent = autoJoinerTab
 
--- MPS Dropdown System
+-- MPS Dropdown System (same as before)
 local mpsLabel = Instance.new("TextLabel")
 mpsLabel.Size = UDim2.new(1, 0, 0, 20)
 mpsLabel.Position = UDim2.new(0, 0, 0, 50)
@@ -245,32 +236,31 @@ mpsDropdown.Text = "1M-3M  ▼"
 mpsDropdown.AutoButtonColor = false
 mpsDropdown.Parent = autoJoinerTab
 
-local optionsFrame = Instance.new("Frame")
-optionsFrame.Size = UDim2.new(1, 0, 0, 0)
-optionsFrame.Position = UDim2.new(0, 0, 0, 115)
-optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-optionsFrame.BorderSizePixel = 0
-optionsFrame.ClipsDescendants = true
-optionsFrame.ZIndex = 2
-optionsFrame.Parent = autoJoinerTab
+local mpsOptionsFrame = Instance.new("Frame")
+mpsOptionsFrame.Size = UDim2.new(1, 0, 0, 0)
+mpsOptionsFrame.Position = UDim2.new(0, 0, 0, 115)
+mpsOptionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mpsOptionsFrame.BorderSizePixel = 0
+mpsOptionsFrame.ClipsDescendants = true
+mpsOptionsFrame.ZIndex = 2
+mpsOptionsFrame.Parent = autoJoinerTab
 
 local mpsRanges = {"1M-3M", "3M-5M", "5M+"}
-local isDropdownOpen = false
+local isMpsDropdownOpen = false
 
-local function toggleDropdown()
-    if isDropdownOpen then
-        optionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+local function toggleMpsDropdown()
+    if isMpsDropdownOpen then
+        mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▼"
     else
-        optionsFrame:TweenSize(UDim2.new(1, 0, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▲"
     end
-    isDropdownOpen = not isDropdownOpen
+    isMpsDropdownOpen = not isMpsDropdownOpen
 end
 
-mpsDropdown.MouseButton1Click:Connect(toggleDropdown)
+mpsDropdown.MouseButton1Click:Connect(toggleMpsDropdown)
 
--- Create dropdown options
 for i, range in ipairs(mpsRanges) do
     local option = Instance.new("TextButton")
     option.Size = UDim2.new(1, 0, 0, 40)
@@ -283,11 +273,11 @@ for i, range in ipairs(mpsRanges) do
     option.TextSize = 18
     option.AutoButtonColor = false
     option.ZIndex = 3
-    option.Parent = optionsFrame
+    option.Parent = mpsOptionsFrame
     
     option.MouseButton1Click:Connect(function()
         selectedMpsRange = range
-        toggleDropdown()
+        toggleMpsDropdown()
         statusLabel.Text = "Status: Filter set to "..range
         statusLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
     end)
@@ -332,25 +322,25 @@ resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
 resumeBtn.Parent = autoJoinerTab
 
--- Utilities Tab Content
-local utilitiesTab = Instance.new("Frame")
-utilitiesTab.Size = UDim2.new(1, 0, 1, 0)
-utilitiesTab.BackgroundTransparency = 1
-utilitiesTab.Visible = false
-utilitiesTab.Parent = tabContentContainer
-tabContents["Utilities"] = utilitiesTab
+-- Others Tab Content
+local othersTab = Instance.new("Frame")
+othersTab.Size = UDim2.new(1, 0, 1, 0)
+othersTab.BackgroundTransparency = 1
+othersTab.Visible = false
+othersTab.Parent = tabContentContainer
+tabContents["Others"] = othersTab
 
--- Utilities Title
-local utilitiesTitle = Instance.new("TextLabel")
-utilitiesTitle.Size = UDim2.new(1, 0, 0, 30)
-utilitiesTitle.Position = UDim2.new(0, 0, 0, 0)
-utilitiesTitle.BackgroundTransparency = 1
-utilitiesTitle.Text = "Utilities"
-utilitiesTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
-utilitiesTitle.Font = Enum.Font.GothamBold
-utilitiesTitle.TextSize = 22
-utilitiesTitle.TextXAlignment = Enum.TextXAlignment.Left
-utilitiesTitle.Parent = utilitiesTab
+-- Others Title
+local othersTitle = Instance.new("TextLabel")
+othersTitle.Size = UDim2.new(1, 0, 0, 30)
+othersTitle.Position = UDim2.new(0, 0, 0, 0)
+othersTitle.BackgroundTransparency = 1
+othersTitle.Text = "Other Utilities"
+othersTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
+othersTitle.Font = Enum.Font.GothamBold
+othersTitle.TextSize = 22
+othersTitle.TextXAlignment = Enum.TextXAlignment.Left
+othersTitle.Parent = othersTab
 
 -- Rejoin Button
 local rejoinBtn = Instance.new("TextButton")
@@ -363,7 +353,7 @@ rejoinBtn.Font = Enum.Font.GothamBold
 rejoinBtn.TextSize = 18
 rejoinBtn.Text = "Rejoin Server"
 rejoinBtn.AutoButtonColor = false
-rejoinBtn.Parent = utilitiesTab
+rejoinBtn.Parent = othersTab
 
 rejoinBtn.MouseButton1Click:Connect(function()
     TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
@@ -380,7 +370,7 @@ serverHopBtn.Font = Enum.Font.GothamBold
 serverHopBtn.TextSize = 18
 serverHopBtn.Text = "Server Hop"
 serverHopBtn.AutoButtonColor = false
-serverHopBtn.Parent = utilitiesTab
+serverHopBtn.Parent = othersTab
 
 serverHopBtn.MouseButton1Click:Connect(function()
     TeleportService:Teleport(game.PlaceId, player)
@@ -397,13 +387,12 @@ fpsBoostBtn.Font = Enum.Font.GothamBold
 fpsBoostBtn.TextSize = 18
 fpsBoostBtn.Text = "Toggle FPS Boost"
 fpsBoostBtn.AutoButtonColor = false
-fpsBoostBtn.Parent = utilitiesTab
+fpsBoostBtn.Parent = othersTab
 
 local fpsBoostEnabled = false
 fpsBoostBtn.MouseButton1Click:Connect(function()
     fpsBoostEnabled = not fpsBoostEnabled
     if fpsBoostEnabled then
-        -- Simple FPS boost by reducing graphics quality
         settings().Rendering.QualityLevel = 1
         fpsBoostBtn.Text = "FPS Boost: ON"
         fpsBoostBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
@@ -414,6 +403,75 @@ fpsBoostBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- BrainRot Filter System
+local brainRotLabel = Instance.new("TextLabel")
+brainRotLabel.Size = UDim2.new(1, 0, 0, 20)
+brainRotLabel.Position = UDim2.new(0, 0, 0, 190)
+brainRotLabel.BackgroundTransparency = 1
+brainRotLabel.Text = "BrainRot Filter:"
+brainRotLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+brainRotLabel.Font = Enum.Font.GothamBold
+brainRotLabel.TextSize = 18
+brainRotLabel.TextXAlignment = Enum.TextXAlignment.Left
+brainRotLabel.Parent = othersTab
+
+local brainRotDropdown = Instance.new("TextButton")
+brainRotDropdown.Size = UDim2.new(1, 0, 0, 40)
+brainRotDropdown.Position = UDim2.new(0, 0, 0, 215)
+brainRotDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+brainRotDropdown.BorderSizePixel = 0
+brainRotDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+brainRotDropdown.Font = Enum.Font.GothamBold
+brainRotDropdown.TextSize = 18
+brainRotDropdown.Text = "Any  ▼"
+brainRotDropdown.AutoButtonColor = false
+brainRotDropdown.Parent = othersTab
+
+local brainRotOptionsFrame = Instance.new("Frame")
+brainRotOptionsFrame.Size = UDim2.new(1, 0, 0, 0)
+brainRotOptionsFrame.Position = UDim2.new(0, 0, 0, 255)
+brainRotOptionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+brainRotOptionsFrame.BorderSizePixel = 0
+brainRotOptionsFrame.ClipsDescendants = true
+brainRotOptionsFrame.ZIndex = 2
+brainRotOptionsFrame.Parent = othersTab
+
+local brainRotOptions = {"Any", "Grappe Medussi", "Other BrainRot 1", "Other BrainRot 2"}
+local isBrainRotDropdownOpen = false
+
+local function toggleBrainRotDropdown()
+    if isBrainRotDropdownOpen then
+        brainRotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        brainRotDropdown.Text = selectedBrainRot.."  ▼"
+    else
+        brainRotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #brainRotOptions * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        brainRotDropdown.Text = selectedBrainRot.."  ▲"
+    end
+    isBrainRotDropdownOpen = not isBrainRotDropdownOpen
+end
+
+brainRotDropdown.MouseButton1Click:Connect(toggleBrainRotDropdown)
+
+for i, brainRot in ipairs(brainRotOptions) do
+    local option = Instance.new("TextButton")
+    option.Size = UDim2.new(1, 0, 0, 40)
+    option.Position = UDim2.new(0, 0, 0, (i-1)*40)
+    option.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    option.BorderSizePixel = 0
+    option.Text = brainRot
+    option.TextColor3 = Color3.fromRGB(255, 255, 255)
+    option.Font = Enum.Font.GothamBold
+    option.TextSize = 18
+    option.AutoButtonColor = false
+    option.ZIndex = 3
+    option.Parent = brainRotOptionsFrame
+    
+    option.MouseButton1Click:Connect(function()
+        selectedBrainRot = brainRot
+        toggleBrainRotDropdown()
+    end)
+end
+
 -- Tab Switching Function
 local function switchTab(tabName)
     currentTab = tabName
@@ -421,7 +479,6 @@ local function switchTab(tabName)
         tab.Visible = (name == tabName)
     end
     
-    -- Update tab button colors
     for _, btn in ipairs(tabButtons) do
         if btn.Text == tabName then
             btn.BackgroundColor3 = Color3.fromRGB(90, 0, 90)
@@ -433,11 +490,10 @@ local function switchTab(tabName)
     end
 end
 
--- Connect tab buttons
 autoJoinerTabBtn.MouseButton1Click:Connect(function() switchTab("AutoJoiner") end)
-secondTabBtn.MouseButton1Click:Connect(function() switchTab("Utilities") end)
+othersTabBtn.MouseButton1Click:Connect(function() switchTab("Others") end)
 
--- Minimize Button
+-- Minimize Button (same as before)
 local minimizeBtn = Instance.new("ImageButton")
 minimizeBtn.Size = UDim2.new(0, 40, 0, 40)
 minimizeBtn.Position = UDim2.new(1, -40, 0, 0)
@@ -464,7 +520,81 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- WebSocket Functions
+-- Updated WebSocket Message Handler with BrainRot Filter
+local function handleWebSocketMessage(message)
+    if isPaused then return end
+    
+    print("[WebSocket] Raw message:", message)
+    
+    -- Parse JSON message
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(message)
+    end)
+    
+    if not success then
+        statusLabel.Text = "Status: Invalid JSON"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse JSON:", message)
+        return
+    end
+    
+    -- Extract data from JSON
+    local jobId = data.jobId
+    local serverName = data.serverName
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    local brainRotType = data.brainRotType or "Unknown" -- Assume the API provides brainRotType
+    
+    -- Validate required fields
+    if not jobId or not mpsText then
+        statusLabel.Text = "Status: Missing data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+        return
+    end
+    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        statusLabel.Text = "Status: Invalid MPS value"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    -- Apply BrainRot filter first (if not set to "Any")
+    local brainRotMatch = (selectedBrainRot == "Any") or (brainRotType == selectedBrainRot)
+    if not brainRotMatch then
+        statusLabel.Text = string.format("Skipping %s (Wrong BrainRot: %s)", string.sub(jobId, 1, 8), brainRotType)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        return
+    end
+    
+    -- Apply MPS filter (only if BrainRot matches)
+    local shouldJoin = false
+    local mpsMillions = mps -- Already in millions
+    
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+    elseif selectedMpsRange == "5M+" then
+        shouldJoin = (mpsMillions > 5)
+    end
+    
+    -- Take action
+    if shouldJoin then
+        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, brainRotType)
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        attemptTeleport(jobId)
+    else
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, brainRotType)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+    end
+    
+    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainRot: %s | Action: %s",
+        jobId, serverName or "N/A", mpsMillions, brainRotType, shouldJoin and "Joining" or "Skipping"))
+end
+
+-- Rest of the functions remain the same as before
 local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
     
@@ -489,70 +619,6 @@ local function attemptTeleport(jobId)
     end
     
     return true
-end
-
-local function handleWebSocketMessage(message)
-    if isPaused then return end
-    
-    print("[WebSocket] Raw message:", message)
-    
-    -- Parse JSON message
-    local success, data = pcall(function()
-        return HttpService:JSONDecode(message)
-    end)
-    
-    if not success then
-        statusLabel.Text = "Status: Invalid JSON"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse JSON:", message)
-        return
-    end
-    
-    -- Extract data from JSON
-    local jobId = data.jobId
-    local serverName = data.serverName
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
-    
-    -- Validate required fields
-    if not jobId or not mpsText then
-        statusLabel.Text = "Status: Missing data"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Missing jobId or moneyPerSec in:", data)
-        return
-    end
-    
-    -- Convert MPS to number
-    local mps = tonumber(mpsText)
-    if not mps then
-        statusLabel.Text = "Status: Invalid MPS value"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return
-    end
-    
-    -- Apply MPS filter
-    local shouldJoin = false
-    local mpsMillions = mps -- Already in millions
-    
-    if selectedMpsRange == "1M-3M" then
-        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
-    elseif selectedMpsRange == "3M-5M" then
-        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
-    elseif selectedMpsRange == "5M+" then
-        shouldJoin = (mpsMillions > 5)
-    end
-    
-    -- Take action
-    if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
-        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId)
-    else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-    end
-    
-    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | Action: %s",
-        jobId, serverName or "N/A", mpsMillions, shouldJoin and "Joining" or "Skipping"))
 end
 
 local function connectWebSocket()
@@ -636,6 +702,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Paused:", isPaused and "Yes" or "No")
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
+        print("Selected BrainRot:", selectedBrainRot)
         print("Connection Attempts:", connectionAttempts)
         print("Current Tab:", currentTab)
         print("=========================")
