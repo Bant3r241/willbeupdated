@@ -1,4 +1,4 @@
-print("AutoJoiner v3.2 - Full Integration Activated")
+print("AutoJoiner v3.5 - Complete Integration")
 
 -- Services
 local Players = game:GetService("Players")
@@ -12,11 +12,10 @@ local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp
 local HOP_INTERVAL = 2.5 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
-local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field
-local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button
-local CHILLI_HUB_WAIT_TIME = 5 -- seconds to wait for Chilli Hub to load
-local CHECK_INTERVAL = 0.5 -- Clipboard check interval
+local CHECK_INTERVAL = 0.3 -- Clipboard check interval
 local MAX_CLIPBOARD_LENGTH = 200 -- Prevent excessively long strings
+local MAX_PASTE_ATTEMPTS = 5 -- Max attempts to paste to Chilli Hub
+local ELEMENT_WAIT_TIME = 0.5 -- Time between element detection attempts
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -39,42 +38,110 @@ local function isValidJobId(jobId)
     return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= MAX_CLIPBOARD_LENGTH
 end
 
-local function joinChilliHub(jobId)
-    if not isValidJobId(jobId) then return false end
-    
-    local startTime = os.time()
-    local inputField, joinButton
-    
-    -- Wait for Chilli Hub to load
-    while os.time() - startTime < CHILLI_HUB_WAIT_TIME do
-        -- Find the input field and join button
-        inputField = playerGui:FindFirstChild(CHILLI_HUB_INPUT_NAME, true) or
-                   playerGui:FindFirstChild("JobIDInput", true) or
-                   playerGui:FindFirstChild("JobIdInput", true)
-        
-        joinButton = playerGui:FindFirstChild(CHILLI_HUB_JOIN_NAME, true) or
-                   playerGui:FindFirstChild("JoinButton", true) or
-                   playerGui:FindFirstChild("JoinBtn", true)
-        
-        if inputField and joinButton then break end
-        task.wait(0.5)
+local function findFirstMatchingElement(parent, className, matchFunction)
+    for _, child in ipairs(parent:GetDescendants()) do
+        if child:IsA(className) and matchFunction(child) then
+            return child
+        end
     end
+    return nil
+end
+
+local function joinChilliHub(jobId)
+    if not isValidJobId(jobId) then 
+        warn("Invalid Job ID format")
+        return false 
+    end
+
+    print("Attempting to join Chilli Hub with Job ID:", string.sub(jobId, 1, 8).."...")
     
-    if not inputField or not joinButton then
-        warn("Chilli Hub elements not found")
+    local inputField, joinButton
+    local attempts = 0
+    
+    -- Enhanced element finding with multiple strategies
+    while attempts < MAX_PASTE_ATTEMPTS do
+        -- Find input field with multiple methods
+        inputField = playerGui:FindFirstChild("JobIDInput", true) or
+                   playerGui:FindFirstChild("JobIdInput", true) or
+                   playerGui:FindFirstChild("Job-ID Input", true) or
+                   playerGui:FindFirstChild("JobID", true) or
+                   findFirstMatchingElement(playerGui, "TextBox", function(tb)
+                       return (tb.PlaceholderText and tb.PlaceholderText:lower():find("job id")) or
+                              (tb.Name:lower():find("job"))
+                   end)
+        
+        -- Find join button with multiple methods
+        joinButton = playerGui:FindFirstChild("Join Job-ID", true) or
+                   playerGui:FindFirstChild("JoinButton", true) or
+                   playerGui:FindFirstChild("JoinBtn", true) or
+                   playerGui:FindFirstChild("Join", true) or
+                   findFirstMatchingElement(playerGui, "TextButton", function(btn)
+                       return btn.Text and btn.Text:lower():find("join")
+                   end)
+        
+        if inputField and joinButton then
+            print("Found Chilli Hub elements:")
+            print("Input Field:", inputField:GetFullName())
+            print("Join Button:", joinButton:GetFullName())
+            break
+        end
+        
+        attempts = attempts + 1
+        warn(string.format("Attempt %d/%d - Missing elements", attempts, MAX_PASTE_ATTEMPTS))
+        task.wait(ELEMENT_WAIT_TIME)
+    end
+
+    if not inputField then
+        warn("Failed to find input field after", MAX_PASTE_ATTEMPTS, "attempts")
         return false
     end
+
+    if not joinButton then
+        warn("Failed to find join button after", MAX_PASTE_ATTEMPTS, "attempts")
+        return false
+    end
+
+    -- Enhanced pasting with verification
+    local pasteAttempts = 0
+    local pasteSuccess = false
     
-    -- Set the job ID
-    inputField.Text = jobId
-    task.wait(0.2) -- Small delay to ensure text is set
-    
-    -- Click the join button
-    if joinButton:IsA("TextButton") then
-        joinButton:Fire("MouseButton1Click")
-        return true
+    while pasteAttempts < 3 and not pasteSuccess do
+        print(string.format("Paste attempt %d/3...", pasteAttempts + 1))
+        inputField.Text = jobId
+        task.wait(0.3)
+        
+        if inputField.Text == jobId then
+            pasteSuccess = true
+            print("Paste verified successfully!")
+        else
+            warn("Paste verification failed! Field contains:", inputField.Text)
+            pasteAttempts = pasteAttempts + 1
+        end
+    end
+
+    if not pasteSuccess then
+        warn("Failed to paste Job ID after 3 attempts")
+        return false
+    end
+
+    -- Enhanced button clicking with verification
+    print("Clicking join button...")
+    for i = 1, 3 do  -- Try multiple clicks
+        if joinButton:IsA("TextButton") then
+            local originalText = joinButton.Text
+            joinButton.Text = "Joining..."
+            joinButton:Fire("MouseButton1Click")
+            task.wait(0.2)
+            
+            if joinButton.Text ~= originalText then
+                print("Join button click successful!")
+                return true
+            end
+        end
+        task.wait(0.3)
     end
     
+    warn("Failed to verify join button click")
     return false
 end
 
@@ -83,16 +150,18 @@ local function monitorClipboard()
     while AUTO_PASTE_ENABLED and isRunning do
         local currentClip = readclipboard() or ""
         
-        -- Only process if clipboard changed and contains valid Job ID
         if currentClip ~= lastClipboard and isValidJobId(currentClip) then
             lastClipboard = currentClip
-            print("New Job ID detected in clipboard:", string.sub(currentClip, 1, 8).."...")
+            print("New Job ID detected:", string.sub(currentClip, 1, 8).."...")
             
             local success = joinChilliHub(currentClip)
             if success then
-                -- Optional: Clear clipboard after successful join
-                writeclipboard("")
+                print("Successfully joined via Chilli Hub!")
+                writeclipboard("")  -- Clear clipboard after success
                 lastClipboard = ""
+            else
+                warn("Failed to join via Chilli Hub, attempting direct teleport...")
+                attemptTeleport(currentClip)
             end
         end
         
@@ -118,10 +187,11 @@ do
     screenGui.Parent = game:GetService("CoreGui")
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 600) -- Increased height for new controls
-    frame.Position = UDim2.new(0.5, -150, 0.3, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(0, 350, 0, 600) -- Slightly wider for better layout
+    frame.Position = UDim2.new(0.5, -175, 0.5, -300) -- Centered
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    frame.BorderSizePixel = 1
+    frame.BorderColor3 = Color3.fromRGB(60, 60, 70)
     frame.Visible = true
     frame.Parent = screenGui
 
@@ -176,14 +246,14 @@ do
     }
 
     local titleContainer = Instance.new("Frame")
-    titleContainer.Size = UDim2.new(1, -40, 0, 40)
+    titleContainer.Size = UDim2.new(1, -40, 0, 50)
     titleContainer.Position = UDim2.new(0, 20, 0, 15)
     titleContainer.BackgroundTransparency = 1
     titleContainer.Parent = frame
 
-    local titleText = "AutoJoiner"
+    local titleText = "AUTO JOINER"
     local charLabels = {}
-    local charWidth = 18
+    local charWidth = 20
     local totalWidth = #titleText * charWidth
 
     for i = 1, #titleText do
@@ -193,14 +263,14 @@ do
         charLabel.BackgroundTransparency = 1
         charLabel.Text = titleText:sub(i,i)
         charLabel.TextColor3 = rainbowColors[(i-1) % #rainbowColors + 1]
-        charLabel.Font = Enum.Font.GothamBold
-        charLabel.TextSize = 22
+        charLabel.Font = Enum.Font.GothamBlack
+        charLabel.TextSize = 24
         charLabel.TextXAlignment = Enum.TextXAlignment.Left
         charLabel.Parent = titleContainer
         table.insert(charLabels, charLabel)
     end
 
-    titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
+    titleContainer.Size = UDim2.new(0, totalWidth, 0, 50)
 
     local waveSpeed = 0.5
     local waveOffset = 0
@@ -221,22 +291,22 @@ do
     -- Status Labels
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Size = UDim2.new(1, -40, 0, 20)
-    statusLabel.Position = UDim2.new(0, 20, 0, 60)
+    statusLabel.Position = UDim2.new(0, 20, 0, 80)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "Status: Disconnected"
     statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.Font = Enum.Font.GothamMedium
     statusLabel.TextSize = 14
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.Parent = frame
 
     local serverInfoLabel = Instance.new("TextLabel")
     serverInfoLabel.Size = UDim2.new(1, -40, 0, 20)
-    serverInfoLabel.Position = UDim2.new(0, 20, 0, 85)
+    serverInfoLabel.Position = UDim2.new(0, 20, 0, 105)
     serverInfoLabel.BackgroundTransparency = 1
     serverInfoLabel.Text = "Server: None"
     serverInfoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
-    serverInfoLabel.Font = Enum.Font.Gotham
+    serverInfoLabel.Font = Enum.Font.GothamMedium
     serverInfoLabel.TextSize = 14
     serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
     serverInfoLabel.Parent = frame
@@ -244,11 +314,11 @@ do
     -- Clipboard Status Label
     local clipboardStatus = Instance.new("TextLabel")
     clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
-    clipboardStatus.Position = UDim2.new(0, 20, 0, 110)
+    clipboardStatus.Position = UDim2.new(0, 20, 0, 130)
     clipboardStatus.BackgroundTransparency = 1
     clipboardStatus.Text = "Clipboard: Ready"
     clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    clipboardStatus.Font = Enum.Font.Gotham
+    clipboardStatus.Font = Enum.Font.GothamMedium
     clipboardStatus.TextSize = 14
     clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
     clipboardStatus.Parent = frame
@@ -256,32 +326,34 @@ do
     -- MPS Dropdown System
     local mpsLabel = Instance.new("TextLabel")
     mpsLabel.Size = UDim2.new(1, -40, 0, 20)
-    mpsLabel.Position = UDim2.new(0, 20, 0, 135)
+    mpsLabel.Position = UDim2.new(0, 20, 0, 160)
     mpsLabel.BackgroundTransparency = 1
     mpsLabel.Text = "Select MPS Range:"
     mpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     mpsLabel.Font = Enum.Font.GothamBold
-    mpsLabel.TextSize = 18
+    mpsLabel.TextSize = 16
     mpsLabel.TextXAlignment = Enum.TextXAlignment.Left
     mpsLabel.Parent = frame
 
     local mpsDropdown = Instance.new("TextButton")
-    mpsDropdown.Size = UDim2.new(1, -40, 0, 40)
-    mpsDropdown.Position = UDim2.new(0, 20, 0, 160)
-    mpsDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    mpsDropdown.BorderSizePixel = 0
+    mpsDropdown.Size = UDim2.new(1, -40, 0, 35)
+    mpsDropdown.Position = UDim2.new(0, 20, 0, 185)
+    mpsDropdown.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    mpsDropdown.BorderSizePixel = 1
+    mpsDropdown.BorderColor3 = Color3.fromRGB(80, 80, 90)
     mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
     mpsDropdown.Font = Enum.Font.GothamBold
-    mpsDropdown.TextSize = 18
+    mpsDropdown.TextSize = 16
     mpsDropdown.Text = "1M-3M  ▼"
     mpsDropdown.AutoButtonColor = false
     mpsDropdown.Parent = frame
 
     local optionsFrame = Instance.new("Frame")
     optionsFrame.Size = UDim2.new(1, -40, 0, 0)
-    optionsFrame.Position = UDim2.new(0, 20, 0, 200)
-    optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    optionsFrame.BorderSizePixel = 0
+    optionsFrame.Position = UDim2.new(0, 20, 0, 220)
+    optionsFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    optionsFrame.BorderSizePixel = 1
+    optionsFrame.BorderColor3 = Color3.fromRGB(70, 70, 80)
     optionsFrame.ClipsDescendants = true
     optionsFrame.ZIndex = 2
     optionsFrame.Parent = frame
@@ -294,7 +366,7 @@ do
             optionsFrame:TweenSize(UDim2.new(1, -40, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
             mpsDropdown.Text = selectedMpsRange.."  ▼"
         else
-            optionsFrame:TweenSize(UDim2.new(1, -40, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+            optionsFrame:TweenSize(UDim2.new(1, -40, 0, #mpsRanges * 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
             mpsDropdown.Text = selectedMpsRange.."  ▲"
         end
         isDropdownOpen = not isDropdownOpen
@@ -304,14 +376,14 @@ do
 
     for i, range in ipairs(mpsRanges) do
         local option = Instance.new("TextButton")
-        option.Size = UDim2.new(1, 0, 0, 40)
-        option.Position = UDim2.new(0, 0, 0, (i-1)*40)
-        option.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        option.Size = UDim2.new(1, 0, 0, 35)
+        option.Position = UDim2.new(0, 0, 0, (i-1)*35)
+        option.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
         option.BorderSizePixel = 0
         option.Text = range
         option.TextColor3 = Color3.fromRGB(255, 255, 255)
         option.Font = Enum.Font.GothamBold
-        option.TextSize = 18
+        option.TextSize = 16
         option.AutoButtonColor = false
         option.ZIndex = 3
         option.Parent = optionsFrame
@@ -326,20 +398,22 @@ do
 
     -- Auto-Paste Toggle
     local pasteToggle = Instance.new("TextButton")
-    pasteToggle.Size = UDim2.new(1, -40, 0, 40)
-    pasteToggle.Position = UDim2.new(0, 20, 0, 350)
+    pasteToggle.Size = UDim2.new(1, -40, 0, 35)
+    pasteToggle.Position = UDim2.new(0, 20, 0, 370)
     pasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
-    pasteToggle.BorderSizePixel = 0
+    pasteToggle.BorderSizePixel = 1
+    pasteToggle.BorderColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
     pasteToggle.Text = AUTO_PASTE_ENABLED and "AUTO-PASTE: ON" or "AUTO-PASTE: OFF"
     pasteToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
     pasteToggle.Font = Enum.Font.GothamBold
-    pasteToggle.TextSize = 18
+    pasteToggle.TextSize = 16
     pasteToggle.AutoButtonColor = false
     pasteToggle.Parent = frame
 
     pasteToggle.MouseButton1Click:Connect(function()
         AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
         pasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
+        pasteToggle.BorderColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
         pasteToggle.Text = AUTO_PASTE_ENABLED and "AUTO-PASTE: ON" or "AUTO-PASTE: OFF"
         clipboardStatus.Text = AUTO_PASTE_ENABLED and "Clipboard: Monitoring" or "Clipboard: Paused"
         
@@ -351,46 +425,51 @@ do
     -- Control Buttons
     local startBtn = Instance.new("TextButton")
     startBtn.Size = UDim2.new(1, -40, 0, 40)
-    startBtn.Position = UDim2.new(0, 20, 0, 400)
-    startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    startBtn.BorderSizePixel = 0
+    startBtn.Position = UDim2.new(0, 20, 0, 420)
+    startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    startBtn.BorderSizePixel = 1
+    startBtn.BorderColor3 = Color3.fromRGB(90, 90, 100)
     startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     startBtn.Font = Enum.Font.GothamBold
-    startBtn.TextSize = 20
-    startBtn.Text = "Start"
+    startBtn.TextSize = 18
+    startBtn.Text = "START"
     startBtn.AutoButtonColor = false
     startBtn.Parent = frame
 
     local stopBtn = Instance.new("TextButton")
     stopBtn.Size = UDim2.new(1, -40, 0, 40)
-    stopBtn.Position = UDim2.new(0, 20, 0, 450)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    stopBtn.BorderSizePixel = 0
+    stopBtn.Position = UDim2.new(0, 20, 0, 470)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    stopBtn.BorderSizePixel = 1
+    stopBtn.BorderColor3 = Color3.fromRGB(90, 90, 100)
     stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     stopBtn.Font = Enum.Font.GothamBold
-    stopBtn.TextSize = 20
-    stopBtn.Text = "Stop"
+    stopBtn.TextSize = 18
+    stopBtn.Text = "STOP"
     stopBtn.AutoButtonColor = false
     stopBtn.Parent = frame
 
     local resumeBtn = Instance.new("TextButton")
     resumeBtn.Size = UDim2.new(1, -40, 0, 40)
-    resumeBtn.Position = UDim2.new(0, 20, 0, 500)
-    resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    resumeBtn.BorderSizePixel = 0
+    resumeBtn.Position = UDim2.new(0, 20, 0, 520)
+    resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    resumeBtn.BorderSizePixel = 1
+    resumeBtn.BorderColor3 = Color3.fromRGB(90, 90, 100)
     resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     resumeBtn.Font = Enum.Font.GothamBold
-    resumeBtn.TextSize = 20
-    resumeBtn.Text = "Resume"
+    resumeBtn.TextSize = 18
+    resumeBtn.Text = "RESUME"
     resumeBtn.AutoButtonColor = false
     resumeBtn.Parent = frame
 
     -- Minimize Button
     local minimizeBtn = Instance.new("ImageButton")
-    minimizeBtn.Size = UDim2.new(0, 40, 0, 40)
-    minimizeBtn.Position = UDim2.new(1, -40, 0, 0)
+    minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+    minimizeBtn.Position = UDim2.new(1, -35, 0, 5)
     minimizeBtn.BackgroundTransparency = 1
-    minimizeBtn.Image = "rbxassetid://2398054"
+    minimizeBtn.Image = "rbxassetid://3926305904"
+    minimizeBtn.ImageRectOffset = Vector2.new(284, 4)
+    minimizeBtn.ImageRectSize = Vector2.new(24, 24)
     minimizeBtn.AutoButtonColor = false
     minimizeBtn.Parent = frame
 
@@ -398,7 +477,9 @@ do
     minimizedImage.Size = UDim2.new(0, 40, 0, 40)
     minimizedImage.Position = UDim2.new(0, 20, 0, 20)
     minimizedImage.BackgroundTransparency = 1
-    minimizedImage.Image = "rbxassetid://2398054"
+    minimizedImage.Image = "rbxassetid://3926305904"
+    minimizedImage.ImageRectOffset = Vector2.new(284, 4)
+    minimizedImage.ImageRectSize = Vector2.new(24, 24)
     minimizedImage.Visible = false
     minimizedImage.Parent = screenGui
 
@@ -628,13 +709,13 @@ task.spawn(function()
         warn("Emergency GUI recovery activating!")
         frame.Visible = true
         screenGui.Enabled = true
-        frame.Position = UDim2.new(0.5, -150, 0.5, -150) -- Center if off-screen
+        frame.Position = UDim2.new(0.5, -175, 0.5, -300) -- Center if off-screen
     end
 end)
 
 -- Start clipboard monitoring if enabled
-if AUTO_PASTE_ENABLED and isRunning then
+if AUTO_PASTE_ENABLED then
     coroutine.wrap(monitorClipboard)()
 end
 
-print("AutoJoiner fully initialized with WebSocket + Clipboard support!")
+print("AutoJoiner fully initialized with all features!")
