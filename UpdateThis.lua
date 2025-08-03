@@ -633,33 +633,31 @@ local function handleServerData(message)
 
     print("[Server Data] Raw message:", message)
 
-    -- Parse JSON message
-    local success, data = pcall(function()
-        return HttpService:JSONDecode(message)
+    -- Safely parse JSON message
+    local data
+    local success, err = pcall(function()
+        data = HttpService:JSONDecode(message)
     end)
     
-    if not success then
+    if not success or not data then
         statusLabel.Text = "Status: Invalid server data"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse server data:", message)
+        print("[ERROR] Failed to parse server data:", err)
         return
     end
     
-    -- Extract data from JSON
-    local jobId = data.jobId
-    local serverName = data.serverName or "Unknown"
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.%-]+)M")
-    
-    -- Detect brainrot type
-    local detectedBrainRot = detectBrainRot(serverName)
-    
-    -- Validate required fields
-    if not jobId or not mpsText then
+    -- Validate required fields exist
+    if not data.jobId or not data.moneyPerSec then
         statusLabel.Text = "Status: Missing server data"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         print("[ERROR] Missing jobId or moneyPerSec in:", data)
         return
     end
+    
+    -- Extract and clean data
+    local jobId = tostring(data.jobId)
+    local serverName = tostring(data.serverName or "Unknown")
+    local mpsText = tostring(data.moneyPerSec):match("([%d%.%-]+)M")
     
     -- Process Job ID (supports encoded IDs)
     local processedId = processJobId(jobId)
@@ -675,44 +673,45 @@ local function handleServerData(message)
     if not mps then
         statusLabel.Text = "Status: Invalid MPS value"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Invalid MPS value:", mpsText)
         return
     end
     
+    -- Detect brainrot type
+    local detectedBrainRot = detectBrainRot(serverName)
+    
     -- Apply BrainRot filter
-    local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
-    if not brainRotMatch then
+    if selectedBrainRot ~= "Any" and detectedBrainRot ~= selectedBrainRot then
         statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(processedId, 1, 8), selectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
         print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(processedId, 1, 8), selectedBrainRot, detectedBrainRot))
         return
     end
     
-    -- Apply MPS filter
-    local shouldJoin = false
-    local mpsMillions = mps
-    
     -- Skip negative MPS servers
-    if mpsMillions <= 0 then
+    if mps <= 0 then
         statusLabel.Text = string.format("Skipping %s (Negative MPS)", string.sub(processedId, 1, 8))
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
         return
     end
     
+    -- Apply MPS filter
+    local shouldJoin = false
     if selectedMpsRange == "1M-3M" then
-        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+        shouldJoin = (mps >= 1 and mps <= 3)
     elseif selectedMpsRange == "3M-5M" then
-        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+        shouldJoin = (mps > 3 and mps <= 5)
     elseif selectedMpsRange == "5M+" then
-        shouldJoin = (mpsMillions > 5)
+        shouldJoin = (mps > 5)
     end
     
     -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mps, detectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         attemptTeleport(processedId)
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mps, detectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
 end
@@ -951,4 +950,5 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
 
