@@ -1,4 +1,4 @@
-print("AutoJoiner v3.7 - Complete Integration")
+print("AutoJoiner v3.8 - Complete Stable Version")
 
 -- Services
 local Players = game:GetService("Players")
@@ -29,172 +29,15 @@ local connectionAttempts = 0
 local lastClipboard = ""
 local AUTO_PASTE_ENABLED = true
 
+-- Device Detection
+local IS_ANDROID = (UserInputService:GetPlatform() == Enum.Platform.Android)
+local IS_EMULATOR = false -- Set to true if running in emulator
+
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Helper Functions
-local function isValidJobId(jobId)
-    -- More flexible validation that handles special characters
-    return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= MAX_CLIPBOARD_LENGTH
-end
-
--- Enhanced Clipboard Functions
-local function updateClipboardStatus()
-    local success, currentClip = pcall(function()
-        return readclipboard() or ""
-    end)
-    
-    if not success then
-        clipboardStatus.Text = "Clipboard: Access Error"
-        clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
-        return
-    end
-    
-    if currentClip == "" then
-        clipboardStatus.Text = "Clipboard: Empty"
-        clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    elseif not isValidJobId(currentClip) then
-        clipboardStatus.Text = "Clipboard: Invalid Job ID"
-        clipboardStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
-    else
-        clipboardStatus.Text = "Clipboard: Valid Job ID"
-        clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-    end
-end
-
-local function monitorClipboard()
-    print("Clipboard monitoring started")
-    while AUTO_PASTE_ENABLED and isRunning do
-        local success, currentClip = pcall(function()
-            return readclipboard() or ""
-        end)
-        
-        if success then
-            print("Clipboard content:", #currentClip > 50 and string.sub(currentClip,1,50).."..." or currentClip)
-            updateClipboardStatus()
-
-            if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-                lastClipboard = currentClip
-                clipboardStatus.Text = "Processing Job ID..."
-                clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
-                
-                local success = joinChilliHub(currentClip)
-                if success then
-                    clipboardStatus.Text = "Joined successfully!"
-                    clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-                    pcall(function() writeclipboard("") end)
-                    lastClipboard = ""
-                else
-                    clipboardStatus.Text = "Failed - Trying teleport"
-                    clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
-                    attemptTeleport(currentClip)
-                end
-            end
-        else
-            warn("Failed to read clipboard:", currentClip)
-            clipboardStatus.Text = "Clipboard: Access Error"
-            clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
-        end
-        
-        task.wait(CHECK_INTERVAL)
-    end
-end
-
-
-local function findFirstMatchingElement(parent, className, matchFunction)
-    for _, child in ipairs(parent:GetDescendants()) do
-        if child:IsA(className) and matchFunction(child) then
-            return child
-        end
-    end
-    return nil
-end
-
-local function joinChilliHub(jobId)
-    if not isValidJobId(jobId) then 
-        warn("Invalid Job ID format")
-        return false 
-    end
-
-    print("Attempting to join Chilli Hub with Job ID:", string.sub(jobId, 1, 8).."...")
-    
-    local inputField, joinButton
-    local attempts = 0
-    
-    while attempts < MAX_PASTE_ATTEMPTS do
-        inputField = playerGui:FindFirstChild("JobIDInput", true) or
-                   playerGui:FindFirstChild("JobIdInput", true) or
-                   playerGui:FindFirstChild("Job-ID Input", true) or
-                   playerGui:FindFirstChild("JobID", true) or
-                   findFirstMatchingElement(playerGui, "TextBox", function(tb)
-                       return (tb.PlaceholderText and tb.PlaceholderText:lower():find("job id")) or
-                              (tb.Name:lower():find("job"))
-                   end)
-        
-        joinButton = playerGui:FindFirstChild("Join Job-ID", true) or
-                   playerGui:FindFirstChild("JoinButton", true) or
-                   playerGui:FindFirstChild("JoinBtn", true) or
-                   playerGui:FindFirstChild("Join", true) or
-                   findFirstMatchingElement(playerGui, "TextButton", function(btn)
-                       return btn.Text and btn.Text:lower():find("join")
-                   end)
-        
-        if inputField and joinButton then
-            print("Found Chilli Hub elements")
-            break
-        end
-        
-        attempts += 1
-        warn("Attempt", attempts, "/", MAX_PASTE_ATTEMPTS, "- Missing elements")
-        task.wait(ELEMENT_WAIT_TIME)
-    end
-
-    if not inputField or not joinButton then
-        warn("Failed to find required elements")
-        return false
-    end
-
-    -- Enhanced pasting with verification
-    local pasteAttempts = 0
-    local pasteSuccess = false
-    
-    while pasteAttempts < 3 and not pasteSuccess do
-        inputField.Text = jobId
-        task.wait(0.3)
-        
-        if inputField.Text == jobId then
-            pasteSuccess = true
-        else
-            pasteAttempts += 1
-        end
-    end
-
-    if not pasteSuccess then
-        warn("Failed to paste Job ID")
-        return false
-    end
-
-    -- Enhanced button clicking with verification
-    for i = 1, 3 do
-        if joinButton:IsA("TextButton") then
-            local originalText = joinButton.Text
-            joinButton.Text = "Joining..."
-            joinButton:Fire("MouseButton1Click")
-            task.wait(0.2)
-            
-            if joinButton.Text ~= originalText then
-                return true
-            end
-        end
-        task.wait(0.3)
-    end
-    
-    warn("Failed to verify join button click")
-    return false
-end
-
--- GUI Creation
+-- ==================== GUI CREATION ====================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoJoinerGUI"
 screenGui.ResetOnSpawn = false
@@ -316,10 +159,11 @@ serverInfoLabel.Parent = frame
 
 -- Clipboard Status Label
 local clipboardStatus = Instance.new("TextLabel")
+clipboardStatus.Name = "ClipboardStatus"
 clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
 clipboardStatus.Position = UDim2.new(0, 20, 0, 130)
 clipboardStatus.BackgroundTransparency = 1
-clipboardStatus.Text = "Clipboard: Ready"
+clipboardStatus.Text = "Clipboard: Initializing..."
 clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
 clipboardStatus.Font = Enum.Font.GothamMedium
 clipboardStatus.TextSize = 14
@@ -508,7 +352,188 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Teleport Functions
+-- ==================== CORE FUNCTIONS ====================
+local function isValidJobId(jobId)
+    return jobId and type(jobId) == "string" 
+           and #jobId >= 22 
+           and #jobId <= MAX_CLIPBOARD_LENGTH
+           and jobId:match("^[%w+/%-_=]+$") ~= nil
+end
+
+local function safeUpdateClipboardStatus()
+    pcall(function()
+        updateClipboardStatus()
+    end)
+end
+
+local function updateClipboardStatus()
+    if not clipboardStatus or not clipboardStatus:IsA("TextLabel") then
+        warn("Clipboard status GUI element not ready!")
+        return false
+    end
+
+    local success, currentClip = pcall(function()
+        return readclipboard() or ""
+    end)
+    
+    if not success then
+        clipboardStatus.Text = "Clipboard: Access Error"
+        clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
+        return false
+    end
+    
+    if currentClip == "" then
+        clipboardStatus.Text = "Clipboard: Empty"
+        clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+    elseif not isValidJobId(currentClip) then
+        clipboardStatus.Text = "Clipboard: Invalid Job ID"
+        clipboardStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+    else
+        clipboardStatus.Text = "Clipboard: Valid Job ID"
+        clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+    
+    return true
+end
+
+local function monitorClipboard()
+    print("Clipboard monitoring started")
+    while AUTO_PASTE_ENABLED and isRunning do
+        local success, currentClip = pcall(function()
+            return readclipboard() or ""
+        end)
+        
+        if success then
+            print("Clipboard content:", #currentClip > 50 and string.sub(currentClip,1,50).."..." or currentClip)
+            safeUpdateClipboardStatus()
+
+            if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+                lastClipboard = currentClip
+                pcall(function()
+                    clipboardStatus.Text = "Processing Job ID..."
+                    clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
+                end)
+                
+                local success = joinChilliHub(currentClip)
+                if success then
+                    pcall(function()
+                        clipboardStatus.Text = "Joined successfully!"
+                        clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+                        writeclipboard("")
+                    end)
+                    lastClipboard = ""
+                else
+                    pcall(function()
+                        clipboardStatus.Text = "Failed - Trying teleport"
+                        clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
+                    end)
+                    attemptTeleport(currentClip)
+                end
+            end
+        else
+            warn("Failed to read clipboard:", currentClip)
+            pcall(function()
+                clipboardStatus.Text = "Clipboard: Access Error"
+                clipboardStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
+            end)
+        end
+        
+        task.wait(CHECK_INTERVAL)
+    end
+end
+
+local function findFirstMatchingElement(parent, className, matchFunction)
+    for _, child in ipairs(parent:GetDescendants()) do
+        if child:IsA(className) and matchFunction(child) then
+            return child
+        end
+    end
+    return nil
+end
+
+local function joinChilliHub(jobId)
+    if not isValidJobId(jobId) then 
+        warn("Invalid Job ID format")
+        return false 
+    end
+
+    print("Attempting to join Chilli Hub with Job ID:", string.sub(jobId, 1, 8).."...")
+    
+    local inputField, joinButton
+    local attempts = 0
+    
+    while attempts < MAX_PASTE_ATTEMPTS do
+        inputField = playerGui:FindFirstChild("JobIDInput", true) or
+                   playerGui:FindFirstChild("JobIdInput", true) or
+                   playerGui:FindFirstChild("Job-ID Input", true) or
+                   playerGui:FindFirstChild("JobID", true) or
+                   findFirstMatchingElement(playerGui, "TextBox", function(tb)
+                       return (tb.PlaceholderText and tb.PlaceholderText:lower():find("job id")) or
+                              (tb.Name:lower():find("job"))
+                   end)
+        
+        joinButton = playerGui:FindFirstChild("Join Job-ID", true) or
+                   playerGui:FindFirstChild("JoinButton", true) or
+                   playerGui:FindFirstChild("JoinBtn", true) or
+                   playerGui:FindFirstChild("Join", true) or
+                   findFirstMatchingElement(playerGui, "TextButton", function(btn)
+                       return btn.Text and btn.Text:lower():find("join")
+                   end)
+        
+        if inputField and joinButton then
+            print("Found Chilli Hub elements")
+            break
+        end
+        
+        attempts += 1
+        warn("Attempt", attempts, "/", MAX_PASTE_ATTEMPTS, "- Missing elements")
+        task.wait(ELEMENT_WAIT_TIME)
+    end
+
+    if not inputField or not joinButton then
+        warn("Failed to find required elements")
+        return false
+    end
+
+    -- Enhanced pasting with verification
+    local pasteAttempts = 0
+    local pasteSuccess = false
+    
+    while pasteAttempts < 3 and not pasteSuccess do
+        inputField.Text = jobId
+        task.wait(0.3)
+        
+        if inputField.Text == jobId then
+            pasteSuccess = true
+        else
+            pasteAttempts += 1
+        end
+    end
+
+    if not pasteSuccess then
+        warn("Failed to paste Job ID")
+        return false
+    end
+
+    -- Enhanced button clicking with verification
+    for i = 1, 3 do
+        if joinButton:IsA("TextButton") then
+            local originalText = joinButton.Text
+            joinButton.Text = "Joining..."
+            joinButton:Fire("MouseButton1Click")
+            task.wait(0.2)
+            
+            if joinButton.Text ~= originalText then
+                return true
+            end
+        end
+        task.wait(0.3)
+    end
+    
+    warn("Failed to verify join button click")
+    return false
+end
+
 local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
     if not isValidJobId(jobId) then return false end
@@ -719,26 +744,30 @@ task.spawn(function()
     end
 end)
 
+-- ==================== INITIALIZATION ====================
+-- Initialize GUI state
+pcall(function()
+    clipboardStatus.Text = "Clipboard: Ready"
+    statusLabel.Text = "Status: Disconnected"
+    serverInfoLabel.Text = "Server: None"
+end)
 
--- Initialize
-print("AutoJoiner initialized with enhanced clipboard monitoring!")
-
--- Start continuous clipboard status updates
+-- Start services
 coroutine.wrap(function()
+    task.wait(1) -- Ensure GUI is fully loaded
+    
+    print("AutoJoiner fully initialized!")
+    if AUTO_PASTE_ENABLED then
+        clipboardStatus.Text = "Clipboard: Monitoring"
+        coroutine.wrap(monitorClipboard)()
+    end
+    
+    -- Continuous status updates
     while true do
-        updateClipboardStatus()
-        task.wait(0.3)
+        safeUpdateClipboardStatus()
+        task.wait(0.5)
     end
 end)()
-
--- Start clipboard monitoring if enabled
-if AUTO_PASTE_ENABLED then
-    clipboardStatus.Text = "Clipboard: Monitoring"
-    coroutine.wrap(function()
-        task.wait(1) -- Small delay before active monitoring begins
-        monitorClipboard()
-    end)()
-end
 
 -- Debug command to test with specific Job ID
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -749,3 +778,4 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
+print("AutoJoiner startup complete")
