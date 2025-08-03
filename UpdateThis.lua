@@ -1,4 +1,4 @@
--- AutoJoiner with Perfect BrainRot Detection (No Auto-Load)
+-- AutoJoiner with Perfect BrainRot Detection + Encoded Job ID Support
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -7,9 +7,11 @@ local TweenService = game:GetService("TweenService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
+local HTTP_FALLBACK_URL = "https://your-http-fallback-api.com/servers" -- Replace with your HTTP endpoint
 local HOP_INTERVAL = 2 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
+local SERVER_HISTORY_EXPIRE = 1800 -- 30 minutes in seconds
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -22,8 +24,72 @@ local selectedMpsRange = "1M-3M"
 local selectedBrainRot = "Any"
 local connectionAttempts = 0
 local currentTab = "AutoJoiner"
+local recentServers = {} -- Tracks joined servers to prevent duplicates
+local useWebSocket = true -- Fallback to HTTP if WebSocket fails
 
+-- =================================================================
+-- Enhanced Encoded Job ID Support System
+-- =================================================================
+
+local function decodeCustomJobId(encodedId)
+    -- Clean common prefixes/suffixes
+    local cleanId = encodedId:gsub("room ID.-:%s*", ""):gsub("%s+", "")
+    
+    -- URL-safe Base64 adjustments
+    cleanId = cleanId:gsub("-", "+"):gsub("_", "/")
+    
+    -- Base64 requires length divisible by 4
+    local padLen = #cleanId % 4
+    if padLen > 0 then
+        cleanId = cleanId .. string.rep("=", 4 - padLen)
+    end
+    
+    -- Attempt decoding
+    local success, decoded = pcall(function()
+        return HttpService:Base64Decode(cleanId)
+    end)
+    
+    return success and decoded or encodedId -- Fallback to original if decoding fails
+end
+
+local function isValidJobId(id)
+    -- Standard Roblox IDs (40-50 alphanumeric chars)
+    if #id >= 40 and #id <= 50 and id:match("^%w+$") then
+        return true
+    end
+    
+    -- Custom encoded IDs (longer with symbols)
+    if #id >= 64 and id:match("^[%w+/=%-_]+$") then
+        return true
+    end
+    
+    return false
+end
+
+local function processJobId(rawId)
+    -- First clean the ID
+    local cleanId = rawId:gsub("JobID:%s*", ""):gsub("%s+", "")
+    
+    -- Check if it's already valid
+    if isValidJobId(cleanId) then
+        return cleanId
+    end
+    
+    -- Attempt decoding if it looks encoded
+    if #cleanId >= 64 then
+        local decoded = decodeCustomJobId(cleanId)
+        if isValidJobId(decoded) then
+            return decoded
+        end
+    end
+    
+    return nil -- Invalid ID
+end
+
+-- =================================================================
 -- Enhanced BrainRot Detection
+-- =================================================================
+
 local function detectBrainRot(serverName)
     if not serverName or serverName == "Unknown" then return "Unknown" end
     
@@ -128,7 +194,7 @@ titleContainer.Position = UDim2.new(0, 20, 0, 15)
 titleContainer.BackgroundTransparency = 1
 titleContainer.Parent = frame
 
-local titleText = "AutoJoiner"
+local titleText = "AutoJoiner Pro"
 local charLabels = {}
 local charWidth = 18
 local totalWidth = #titleText * charWidth
@@ -532,7 +598,269 @@ local function loadSettings()
     brainRotDropdown.Text = selectedBrainRot.."  ▼"
 end
 
+-- =================================================================
+-- Enhanced Connection System with WebSocket/HTTP Fallback
+-- =================================================================
+
+local function fetchServersHTTP()
+    local success, response = pcall(function()
+        return game:HttpGet(HTTP_FALLBACK_URL)
+    end)
+    
+    if success then
+        return response
+    else
+        warn("HTTP Fallback failed:", response)
+        return nil
+    end
+end
+
+local function handleServerData(message)
+    -- Process both WebSocket and HTTP messages
+    if not isRunning or isPaused then
+        print("[DEBUG] Ignoring message - script not running")
+        return
+    end
+
+    print("[Server Data] Raw message:", message)
+
+    -- Parse JSON message
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(message)
+    end)
+    
+    if not success then
+        statusLabel.Text = "Status: Invalid server data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse server data:", message)
+        return
+    end
+    
+    -- Extract data from JSON
+    local jobId = data.jobId
+    local serverName = data.serverName or "Unknown"
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    
+    -- Detect brainrot type
+    local detectedBrainRot = detectBrainRot(serverName)
+    
+    -- Validate required fields
+    if not jobId or not mpsText then
+        statusLabel.Text = "Status: Missing server data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+        return
+    end
+    
+    -- Process Job ID (supports encoded IDs)
+    local processedId = processJobId(jobId)
+    if not processedId then
+        statusLabel.Text = "Status: Invalid Job ID format"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Invalid Job ID:", jobId)
+        return
+    end
+    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        statusLabel.Text = "Status: Invalid MPS value"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    -- Apply BrainRot filter
+    local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
+    if not brainRotMatch then
+        statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(processedId, 1, 8), selectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(processedId, 1, 8), selectedBrainRot, detectedBrainRot))
+        return
+    end
+    
+    -- Apply MPS filter
+    local shouldJoin = false
+    local mpsMillions = mps
+    
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+    elseif selectedMpsRange == "5M+" then
+        shouldJoin = (mpsMillions > 5)
+    end
+    
+    -- Take action
+    if shouldJoin then
+        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        attemptTeleport(processedId)
+    else
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(processedId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+    end
+end
+
+-- =================================================================
+-- Enhanced Teleport Function with Encoded ID Support
+-- =================================================================
+
+local function attemptTeleport(jobId)
+    if not isRunning or isPaused then return false end
+    
+    -- Cooldown check
+    local currentTime = os.time()
+    if currentTime - lastHopTime < HOP_INTERVAL then
+        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
+    end
+
+    -- Try both encoded and decoded versions
+    local versionsToTry = {jobId}
+    if #jobId > 50 then  -- Likely encoded
+        local decoded = decodeCustomJobId(jobId)
+        if isValidJobId(decoded) then
+            table.insert(versionsToTry, 1, decoded) -- Try decoded first
+        end
+    end
+
+    for _, idVersion in ipairs(versionsToTry) do
+        -- Skip if recently joined
+        if recentServers[idVersion] then
+            print("Skipping recently joined server:", string.sub(idVersion, 1, 8))
+            return false
+        end
+
+        -- Attempt teleport
+        local success, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, idVersion, player)
+        end)
+
+        if success then
+            -- Update state on success
+            lastHopTime = os.time()
+            activeJobId = idVersion
+            recentServers[idVersion] = os.time()
+            serverInfoLabel.Text = "Server: "..string.sub(idVersion, 1, 8).."..."
+            return true
+        else
+            warn("Teleport failed with", string.sub(idVersion, 1, 8), ":", err)
+        end
+    end
+
+    statusLabel.Text = "Status: All teleport attempts failed"
+    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    return false
+end
+
+-- =================================================================
+-- Connection Management
+-- =================================================================
+
+local function connectWebSocket()
+    if not isRunning then return end
+    
+    connectionAttempts = connectionAttempts + 1
+    statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
+    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+    
+    -- Close existing connection
+    if socket then
+        pcall(function() socket:Close() end)
+        socket = nil
+    end
+    
+    local success, err = pcall(function()
+        socket = WebSocket.connect(WEBSOCKET_URL)
+        
+        socket.OnMessage:Connect(function(message)
+            handleServerData(message)
+        end)
+        
+        socket.OnClose:Connect(function()
+            if isRunning and not isPaused and connectionAttempts < MAX_RETRIES then
+                task.wait(RECONNECT_DELAY)
+                connectWebSocket()
+            elseif isRunning then
+                -- Fallback to HTTP if WebSocket fails
+                useWebSocket = false
+                statusLabel.Text = "Status: Switching to HTTP"
+                task.wait(2)
+                fetchServersHTTP()
+            end
+        end)
+        
+        connectionAttempts = 0
+        useWebSocket = true
+        statusLabel.Text = "Status: Connected (WS)"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end)
+    
+    if not success then
+        print("[ERROR] WebSocket connection failed:", err)
+        if connectionAttempts < MAX_RETRIES then
+            task.wait(RECONNECT_DELAY)
+            connectWebSocket()
+        else
+            -- Fallback to HTTP
+            useWebSocket = false
+            statusLabel.Text = "Status: Using HTTP Fallback"
+            task.wait(2)
+            fetchServersHTTP()
+        end
+    end
+end
+
+-- =================================================================
+-- Control Handlers
+-- =================================================================
+
+startBtn.MouseButton1Click:Connect(function()
+    if isRunning then return end
+    isRunning = true
+    isPaused = false
+    connectionAttempts = 0
+    connectWebSocket()
+end)
+
+stopBtn.MouseButton1Click:Connect(function()
+    if not isRunning then return end
+    isRunning = false
+    isPaused = false
+    if socket then
+        pcall(function() socket:Close() end)
+        socket = nil
+    end
+    statusLabel.Text = "Status: Stopped"
+    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+resumeBtn.MouseButton1Click:Connect(function()
+    if not isRunning or not isPaused then return end
+    isPaused = false
+    statusLabel.Text = "Status: Resumed"
+    statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+end)
+
+-- =================================================================
+-- Server History Cleanup
+-- =================================================================
+
+task.spawn(function()
+    while true do
+        task.wait(300) -- Clean every 5 minutes
+        local currentTime = os.time()
+        for id, time in pairs(recentServers) do
+            if currentTime - time > SERVER_HISTORY_EXPIRE then
+                recentServers[id] = nil
+            end
+        end
+    end
+end)
+
+-- =================================================================
 -- Tab Switching
+-- =================================================================
+
 local function switchTab(tabName)
     currentTab = tabName
     for name, tab in pairs(tabContents) do
@@ -578,183 +906,6 @@ end)
 minimizedImage.MouseButton1Click:Connect(function()
     frame.Visible = true
     minimizedImage.Visible = false
-end)
-
--- WebSocket Functions
-local function attemptTeleport(jobId)
-    if not isRunning or isPaused then return false end
-    
-    local currentTime = os.time()
-    if currentTime - lastHopTime < HOP_INTERVAL then
-        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
-    end
-    
-    lastHopTime = os.time()
-    activeJobId = jobId
-    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
-    
-    local success, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
-    end)
-    
-    if not success then
-        warn("Teleport failed:", err)
-        statusLabel.Text = "Status: Failed - Retrying"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    end
-    
-    return true
-end
-
-local function handleWebSocketMessage(message)
-    if not isRunning or isPaused then  -- Ensures no filtering when stopped
-        print("[DEBUG] Ignoring message - script not running")
-        return
-    end
-    
-    print("[WebSocket] Raw message:", message)
-    
-    -- Parse JSON message
-    local success, data = pcall(function()
-        return HttpService:JSONDecode(message)
-    end)
-    
-    if not success then
-        statusLabel.Text = "Status: Invalid JSON"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse JSON:", message)
-        return
-    end
-    
-    -- Extract data from JSON
-    local jobId = data.jobId
-    local serverName = data.serverName or "Unknown"
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
-    
-    -- Detect brainrot type using enhanced function
-    local detectedBrainRot = detectBrainRot(serverName)
-    
-    -- Validate required fields
-    if not jobId or not mpsText then
-        statusLabel.Text = "Status: Missing data"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Missing jobId or moneyPerSec in:", data)
-        return
-    end
-    
-    -- Convert MPS to number
-    local mps = tonumber(mpsText)
-    if not mps then
-        statusLabel.Text = "Status: Invalid MPS value"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return
-    end
-    
-    -- Apply BrainRot filter first (if not set to "Any")
-    local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
-    if not brainRotMatch then
-        statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(jobId, 1, 8), selectedBrainRot)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-        print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(jobId, 1, 8), selectedBrainRot, detectedBrainRot))
-        return
-    end
-    
-    -- Apply MPS filter (only if BrainRot matches)
-    local shouldJoin = false
-    local mpsMillions = mps
-    
-    if selectedMpsRange == "1M-3M" then
-        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
-    elseif selectedMpsRange == "3M-5M" then
-        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
-    elseif selectedMpsRange == "5M+" then
-        shouldJoin = (mpsMillions > 5)
-    end
-    
-    -- Take action
-    if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
-        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId)
-    else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-    end
-    
-    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainRot: %s | Action: %s",
-        jobId, serverName, mpsMillions, detectedBrainRot, shouldJoin and "Joining" or "Skipping"))
-end
-
-local function connectWebSocket()
-    if not isRunning then return end
-    
-    connectionAttempts = connectionAttempts + 1
-    statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
-    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
-    
-    -- Close existing connection
-    if socket then
-        pcall(function() socket:Close() end)
-        socket = nil
-    end
-    
-    local success, err = pcall(function()
-        socket = WebSocket.connect(WEBSOCKET_URL)
-        
-        socket.OnMessage:Connect(handleWebSocketMessage)
-        
-        socket.OnClose:Connect(function()
-            if isRunning and not isPaused and connectionAttempts < MAX_RETRIES then
-                task.wait(RECONNECT_DELAY)
-                connectWebSocket()
-            end
-        end)
-        
-        connectionAttempts = 0
-        statusLabel.Text = "Status: Connected"
-        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    end)
-    
-    if not success then
-        print("[ERROR] Connection failed:", err)
-        if connectionAttempts < MAX_RETRIES then
-            task.wait(RECONNECT_DELAY)
-            connectWebSocket()
-        else
-            statusLabel.Text = "Status: Connection failed"
-            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            isRunning = false
-        end
-    end
-end
-
--- Control Handlers
-startBtn.MouseButton1Click:Connect(function()
-    if isRunning then return end
-    isRunning = true
-    isPaused = false
-    connectionAttempts = 0
-    connectWebSocket()
-end)
-
-stopBtn.MouseButton1Click:Connect(function()
-    if not isRunning then return end
-    isRunning = false
-    isPaused = false
-    if socket then
-        pcall(function() socket:Close() end)
-        socket = nil
-    end
-    statusLabel.Text = "Status: Stopped"
-    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-end)
-
-resumeBtn.MouseButton1Click:Connect(function()
-    if not isRunning or not isPaused then return end
-    isPaused = false
-    statusLabel.Text = "Status: Resumed"
-    statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 end)
 
 -- Debugging
