@@ -520,7 +520,7 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Updated WebSocket Message Handler with BrainRot Filter
+-- Updated WebSocket Message Handler with BrainRot Detection
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
@@ -540,9 +540,17 @@ local function handleWebSocketMessage(message)
     
     -- Extract data from JSON
     local jobId = data.jobId
-    local serverName = data.serverName
+    local serverName = data.serverName or "Unknown"
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
-    local brainRotType = data.brainRotType or "Unknown" -- Assume the API provides brainRotType
+    
+    -- Detect brainrot type from server name
+    local detectedBrainRot = "Unknown"
+    if string.find(serverName:lower(), "vacca") then
+        detectedBrainRot = "La Vacca Saturno Saturnita"
+    elseif string.find(serverName:lower(), "grappe") or string.find(serverName:lower(), "medussi") then
+        detectedBrainRot = "Grappe Medussi"
+    -- Add more brainrot detection patterns as needed
+    end
     
     -- Validate required fields
     if not jobId or not mpsText then
@@ -561,10 +569,11 @@ local function handleWebSocketMessage(message)
     end
     
     -- Apply BrainRot filter first (if not set to "Any")
-    local brainRotMatch = (selectedBrainRot == "Any") or (brainRotType == selectedBrainRot)
+    local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
     if not brainRotMatch then
-        statusLabel.Text = string.format("Skipping %s (Wrong BrainRot: %s)", string.sub(jobId, 1, 8), brainRotType)
+        statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(jobId, 1, 8), selectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(jobId, 1, 8), selectedBrainRot, detectedBrainRot))
         return
     end
     
@@ -582,16 +591,16 @@ local function handleWebSocketMessage(message)
     
     -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, brainRotType)
+        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         attemptTeleport(jobId)
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, brainRotType)
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
     
     print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainRot: %s | Action: %s",
-        jobId, serverName or "N/A", mpsMillions, brainRotType, shouldJoin and "Joining" or "Skipping"))
+        jobId, serverName, mpsMillions, detectedBrainRot, shouldJoin and "Joining" or "Skipping"))
 end
 
 -- Rest of the functions remain the same as before
@@ -715,3 +724,4 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
