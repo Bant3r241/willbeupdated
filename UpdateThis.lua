@@ -757,13 +757,8 @@ local function attemptTeleport(jobId)
     end
 end
 
-    statusLabel.Text = "Status: All teleport attempts failed"
-    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-    return false
-end
-
 -- =================================================================
--- Connection Management
+-- WebSocket Connection Management
 -- =================================================================
 
 local function connectWebSocket()
@@ -815,27 +810,6 @@ local function connectWebSocket()
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
         else
-            useWebSocket = false
-            statusLabel.Text = "Status: Using HTTP Fallback"
-            task.wait(2)
-            fetchServersHTTP()
-        end
-    end
-end
-        
-        connectionAttempts = 0
-        useWebSocket = true
-        statusLabel.Text = "Status: Connected (WS)"
-        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    end)
-    
-    if not success then
-        print("[ERROR] WebSocket connection failed:", err)
-        if connectionAttempts < MAX_RETRIES then
-            task.wait(RECONNECT_DELAY)
-            connectWebSocket()
-        else
-            -- Fallback to HTTP
             useWebSocket = false
             statusLabel.Text = "Status: Using HTTP Fallback"
             task.wait(2)
@@ -969,4 +943,3 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
-
