@@ -1,15 +1,19 @@
--- AutoJoiner with Robust Teleport Handling (Hybrid UUID + Base64 Strategy)
+-- AutoJoiner v2.0 - Complete with Chilli Hub Integration and Enhanced Features
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
-local HOP_INTERVAL = 2.5 -- Increased from 2 to reduce rate limiting
+local HOP_INTERVAL = 2.5 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
-local MAX_UNAUTHORIZED_ATTEMPTS = 3 -- Max retries for unauthorized errors
+local MAX_UNAUTHORIZED_ATTEMPTS = 3
+local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field name
+local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button name
+local CHECK_INTERVAL = 0.3 -- Clipboard check interval
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -21,6 +25,7 @@ local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
 local unauthorizedAttempts = 0
+local AUTO_PASTE_ENABLED = true
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -28,23 +33,17 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- Helper Functions
 local function isValidJobId(jobId)
-    if not jobId or type(jobId) ~= "string" then return false end
-    return #jobId >= 22 and #jobId <= 200 -- Valid Base64 Job ID length range
+    return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= 200
 end
 
 local function extractUuidFromJobId(jobId)
     if not isValidJobId(jobId) then return nil end
     
     local success, decoded = pcall(function()
-        return game:GetService("HttpService"):Base64Decode(jobId)
+        return HttpService:Base64Decode(jobId)
     end)
     
-    if not success or not decoded or #decoded < 16 then
-        warn("Failed to decode Job ID or invalid length")
-        return nil
-    end
-    
-    return decoded:sub(1, 16) -- First 16 bytes = UUID
+    return success and decoded and #decoded >= 16 and decoded:sub(1, 16) or nil
 end
 
 -- Main GUI
@@ -54,7 +53,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 550)
+frame.Size = UDim2.new(0, 300, 0, 600) -- Increased height for new features
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
@@ -99,7 +98,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Rainbow Colors for Title Animation
+-- Rainbow Title Animation
 local rainbowColors = {
     Color3.fromRGB(255, 0, 0),    -- Red
     Color3.fromRGB(255, 127, 0),  -- Orange
@@ -110,7 +109,6 @@ local rainbowColors = {
     Color3.fromRGB(148, 0, 211)   -- Violet
 }
 
--- Advanced Per-Character Rainbow Wave Title
 local titleContainer = Instance.new("Frame")
 titleContainer.Size = UDim2.new(1, -40, 0, 40)
 titleContainer.Position = UDim2.new(0, 20, 0, 15)
@@ -119,10 +117,9 @@ titleContainer.Parent = frame
 
 local titleText = "AutoJoiner"
 local charLabels = {}
-local charWidth = 18 -- Width of each character
+local charWidth = 18
 local totalWidth = #titleText * charWidth
 
--- Create individual labels for each character
 for i = 1, #titleText do
     local charLabel = Instance.new("TextLabel")
     charLabel.Size = UDim2.new(0, charWidth, 1, 0)
@@ -137,14 +134,11 @@ for i = 1, #titleText do
     table.insert(charLabels, charLabel)
 end
 
--- Adjust container size to fit text exactly
 titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
 
--- Rainbow wave animation variables
-local waveSpeed = 0.5 -- Speed of the wave effect
+local waveSpeed = 0.5
 local waveOffset = 0
 
--- Advanced wave animation function
 local function startAdvancedRainbowWave()
     while true do
         for i, label in ipairs(charLabels) do
@@ -156,10 +150,9 @@ local function startAdvancedRainbowWave()
     end
 end
 
--- Start the animation
 coroutine.wrap(startAdvancedRainbowWave)()
 
--- Status Label
+-- Status Labels
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -40, 0, 20)
 statusLabel.Position = UDim2.new(0, 20, 0, 60)
@@ -171,7 +164,6 @@ statusLabel.TextSize = 14
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Parent = frame
 
--- Server Info Label
 local serverInfoLabel = Instance.new("TextLabel")
 serverInfoLabel.Size = UDim2.new(1, -40, 0, 20)
 serverInfoLabel.Position = UDim2.new(0, 20, 0, 85)
@@ -232,7 +224,6 @@ end
 
 mpsDropdown.MouseButton1Click:Connect(toggleDropdown)
 
--- Create dropdown options
 for i, range in ipairs(mpsRanges) do
     local option = Instance.new("TextButton")
     option.Size = UDim2.new(1, 0, 0, 40)
@@ -255,7 +246,7 @@ for i, range in ipairs(mpsRanges) do
     end)
 end
 
--- Start Button
+-- Control Buttons
 local startBtn = Instance.new("TextButton")
 startBtn.Size = UDim2.new(1, -40, 0, 40)
 startBtn.Position = UDim2.new(0, 20, 0, 320)
@@ -268,7 +259,6 @@ startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
 startBtn.Parent = frame
 
--- Stop Button
 local stopBtn = Instance.new("TextButton")
 stopBtn.Size = UDim2.new(1, -40, 0, 40)
 stopBtn.Position = UDim2.new(0, 20, 0, 370)
@@ -281,7 +271,6 @@ stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
 stopBtn.Parent = frame
 
--- Resume Button
 local resumeBtn = Instance.new("TextButton")
 resumeBtn.Size = UDim2.new(1, -40, 0, 40)
 resumeBtn.Position = UDim2.new(0, 20, 0, 420)
@@ -293,6 +282,46 @@ resumeBtn.TextSize = 20
 resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
 resumeBtn.Parent = frame
+
+-- Chilli Hub Auto-Join Section
+local pasteFrame = Instance.new("Frame")
+pasteFrame.Size = UDim2.new(1, -40, 0, 80)
+pasteFrame.Position = UDim2.new(0, 20, 0, 470)
+pasteFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+pasteFrame.BorderSizePixel = 0
+pasteFrame.Parent = frame
+
+local pasteTitle = Instance.new("TextLabel")
+pasteTitle.Size = UDim2.new(1, 0, 0, 20)
+pasteTitle.Position = UDim2.new(0, 0, 0, 0)
+pasteTitle.BackgroundTransparency = 1
+pasteTitle.Text = "Chilli Hub Auto-Join"
+pasteTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+pasteTitle.Font = Enum.Font.GothamBold
+pasteTitle.TextSize = 16
+pasteTitle.Parent = pasteFrame
+
+local pasteStatus = Instance.new("TextLabel")
+pasteStatus.Size = UDim2.new(1, 0, 0, 20)
+pasteStatus.Position = UDim2.new(0, 0, 0, 25)
+pasteStatus.BackgroundTransparency = 1
+pasteStatus.Text = "Status: Ready"
+pasteStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+pasteStatus.Font = Enum.Font.Gotham
+pasteStatus.TextSize = 14
+pasteStatus.Parent = pasteFrame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, 0, 0, 30)
+toggleButton.Position = UDim2.new(0, 0, 0, 50)
+toggleButton.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
+toggleButton.BorderSizePixel = 0
+toggleButton.Text = AUTO_PASTE_ENABLED and "AUTO-JOIN: ON" or "AUTO-JOIN: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 16
+toggleButton.AutoButtonColor = false
+toggleButton.Parent = pasteFrame
 
 -- Minimize Button
 local minimizeBtn = Instance.new("ImageButton")
@@ -321,12 +350,103 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Enhanced Teleport Function
+-- Chilli Hub Functions
+local function findChilliElements()
+    local inputField, joinButton
+    
+    for _, gui in ipairs(playerGui:GetDescendants()) do
+        if not inputField and gui:IsA("TextBox") then
+            if gui.Name == CHILLI_HUB_INPUT_NAME or string.find(gui.Name:lower(), "jobid") then
+                inputField = gui
+            end
+        end
+        
+        if not joinButton and gui:IsA("TextButton") then
+            if gui.Name == CHILLI_HUB_JOIN_NAME or string.find(gui.Text:lower(), "join job") then
+                joinButton = gui
+            end
+        end
+        
+        if inputField and joinButton then break end
+    end
+    
+    return inputField, joinButton
+end
+
+local function runAutoJoin()
+    local lastClipboard = ""
+    
+    while AUTO_PASTE_ENABLED do
+        task.wait(CHECK_INTERVAL)
+        
+        local currentClip = ""
+        pcall(function()
+            currentClip = getclipboard() or ""
+        end)
+        
+        if currentClip == lastClipboard or not isValidJobId(currentClip) then
+            if currentClip ~= lastClipboard then
+                pasteStatus.Text = "Status: Invalid Job ID"
+                pasteStatus.TextColor3 = Color3.fromRGB(255, 150, 150)
+                lastClipboard = currentClip
+            end
+            goto continue
+        end
+        
+        lastClipboard = currentClip
+        pasteStatus.Text = "Status: Processing..."
+        pasteStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
+        
+        local inputField, joinButton = findChilliElements()
+        
+        if not inputField then
+            pasteStatus.Text = "Status: Input not found"
+            pasteStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+            goto continue
+        end
+        
+        if not joinButton then
+            pasteStatus.Text = "Status: Join button not found"
+            pasteStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+            goto continue
+        end
+        
+        pcall(function()
+            inputField.Text = currentClip
+            pasteStatus.Text = "Status: Pasted Job ID"
+            pasteStatus.TextColor3 = Color3.fromRGB(150, 255, 150)
+            
+            task.wait(0.2)
+            
+            joinButton:Fire("MouseButton1Click")
+            pasteStatus.Text = "Status: Joined server!"
+            pasteStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+            
+            task.wait(2)
+        end)
+        
+        ::continue::
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+    AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
+    toggleButton.Text = AUTO_PASTE_ENABLED and "AUTO-JOIN: ON" or "AUTO-JOIN: OFF"
+    toggleButton.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
+    
+    if AUTO_PASTE_ENABLED then
+        coroutine.wrap(runAutoJoin)()
+    else
+        pasteStatus.Text = "Status: Paused"
+        pasteStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+    end
+end)
+
+-- Teleport Functions
 local function attemptTeleport(jobId, isHighValue)
     if not isRunning or isPaused then return false end
     if not isValidJobId(jobId) then return false end
     
-    -- Rate limiting check
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
         local waitTime = HOP_INTERVAL - (currentTime - lastHopTime)
@@ -356,7 +476,6 @@ local function attemptTeleport(jobId, isHighValue)
     
     serverInfoLabel.Text = string.format("Server: %s... [%s]", string.sub(jobId, 1, 8), method)
     
-    -- Teleport with retry logic
     while attemptCount <= 2 do
         local success, result = pcall(function()
             return TeleportService:TeleportToPlaceInstance(game.PlaceId, teleportId, player)
@@ -365,11 +484,10 @@ local function attemptTeleport(jobId, isHighValue)
         if success and result == true then
             statusLabel.Text = string.format("Joined %s...", string.sub(jobId, 1, 8))
             statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            unauthorizedAttempts = 0 -- Reset counter on success
+            unauthorizedAttempts = 0
             return true
         end
         
-        -- Handle specific errors
         if not success then
             local err = tostring(result)
             
@@ -385,14 +503,13 @@ local function attemptTeleport(jobId, isHighValue)
                 statusLabel.Text = string.format("Retry %d/%d...", unauthorizedAttempts, MAX_UNAUTHORIZED_ATTEMPTS)
                 statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
                 
-                -- Switch to full Base64 if UUID failed
                 if method == "UUID" and attemptCount == 1 then
                     teleportId = jobId
                     method = "Full"
                     statusLabel.Text = statusLabel.Text .. " (Trying Full ID)"
                 end
                 
-                task.wait(1) -- Brief pause before retry
+                task.wait(1)
             else
                 statusLabel.Text = "Status: Error - " .. string.sub(err, 1, 30)
                 statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
@@ -406,11 +523,10 @@ local function attemptTeleport(jobId, isHighValue)
     return false
 end
 
--- Updated WebSocket Message Handler
+-- WebSocket Functions
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
-    -- Parse JSON message
     local success, data = pcall(function()
         return HttpService:JSONDecode(message)
     end)
@@ -421,18 +537,16 @@ local function handleWebSocketMessage(message)
         return
     end
     
-    -- Validate jobId
-    if not isValidJobId(data.jobId) then
-        statusLabel.Text = "Status: Invalid Job ID"
+    local jobId = data.jobId
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    local mps = tonumber(mpsText) or 0
+    
+    if not jobId or not mpsText then
+        statusLabel.Text = "Status: Missing data"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
     
-    -- Extract MPS value
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
-    local mps = tonumber(mpsText) or 0
-    
-    -- Determine server value tier and action
     local isHighValue = (mps >= 10)
     local shouldJoin = false
     local actionText = "Skipping"
@@ -451,13 +565,12 @@ local function handleWebSocketMessage(message)
         actionText = "Joining [Full]"
     end
     
-    -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("%s %s (%.1fM/s)", actionText, string.sub(data.jobId, 1, 8), mps)
+        statusLabel.Text = string.format("%s %s (%.1fM/s)", actionText, string.sub(jobId, 1, 8), mps)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(data.jobId, isHighValue)
+        attemptTeleport(jobId, isHighValue)
     else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(data.jobId, 1, 8), mps)
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mps)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
 end
@@ -469,7 +582,6 @@ local function connectWebSocket()
     statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     
-    -- Close existing connection
     if socket then
         pcall(function() socket:Close() end)
         socket = nil
@@ -493,7 +605,6 @@ local function connectWebSocket()
     end)
     
     if not success then
-        print("[ERROR] Connection failed:", err)
         if connectionAttempts < MAX_RETRIES then
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
@@ -511,8 +622,10 @@ startBtn.MouseButton1Click:Connect(function()
     isRunning = true
     isPaused = false
     connectionAttempts = 0
-    unauthorizedAttempts = 0
     connectWebSocket()
+    if AUTO_PASTE_ENABLED then
+        coroutine.wrap(runAutoJoin)()
+    end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -534,7 +647,7 @@ resumeBtn.MouseButton1Click:Connect(function()
     statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 end)
 
--- Enhanced Debug Information
+-- Debugging
 UserInputService.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.F5 then
         print("\n=== DEBUG INFO ===")
@@ -544,7 +657,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
-        print("Unauthorized Attempts:", unauthorizedAttempts)
+        print("Auto-Paste:", AUTO_PASTE_ENABLED and "ON" or "OFF")
         print("=========================")
     end
 end)
@@ -555,3 +668,8 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
+-- Start auto-join if enabled
+if AUTO_PASTE_ENABLED then
+    coroutine.wrap(runAutoJoin)()
+end
