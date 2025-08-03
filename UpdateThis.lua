@@ -53,7 +53,12 @@ local function decodeCustomJobId(encodedId)
 end
 
 local function isValidJobId(id)
-    -- Standard Roblox IDs (40-50 alphanumeric chars)
+    -- Standard Roblox UUID format (8-4-4-4-12 hex digits)
+    if id:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+        return true
+    end
+    
+    -- Standard Roblox alphanumeric IDs (40-50 chars)
     if #id >= 40 and #id <= 50 and id:match("^%w+$") then
         return true
     end
@@ -67,8 +72,12 @@ local function isValidJobId(id)
 end
 
 local function processJobId(rawId)
-    -- First clean the ID
-    local cleanId = rawId:gsub("JobID:%s*", ""):gsub("%s+", "")
+    -- First clean the ID of common prefixes/suffixes
+    local cleanId = rawId:gsub("JobID:%s*", "")
+                      :gsub("room ID.-:%s*", "")
+                      :gsub("%s+", "")
+                      :gsub('"', "")
+                      :gsub("'", "")
     
     -- Check if it's already valid
     if isValidJobId(cleanId) then
@@ -639,7 +648,7 @@ local function handleServerData(message)
     -- Extract data from JSON
     local jobId = data.jobId
     local serverName = data.serverName or "Unknown"
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.%-]+)M")
     
     -- Detect brainrot type
     local detectedBrainRot = detectBrainRot(serverName)
@@ -661,7 +670,7 @@ local function handleServerData(message)
         return
     end
     
-    -- Convert MPS to number
+    -- Convert MPS to number (handle negative values)
     local mps = tonumber(mpsText)
     if not mps then
         statusLabel.Text = "Status: Invalid MPS value"
@@ -681,6 +690,13 @@ local function handleServerData(message)
     -- Apply MPS filter
     local shouldJoin = false
     local mpsMillions = mps
+    
+    -- Skip negative MPS servers
+    if mpsMillions <= 0 then
+        statusLabel.Text = string.format("Skipping %s (Negative MPS)", string.sub(processedId, 1, 8))
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        return
+    end
     
     if selectedMpsRange == "1M-3M" then
         shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
@@ -935,3 +951,4 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
