@@ -1,10 +1,11 @@
-print("Script is executing!") -- Debug check
+print("AutoJoiner v3.2 - Full Integration Activated")
 
--- AutoJoiner v3.1 - Chilli Hub Integration
+-- Services
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -14,6 +15,8 @@ local MAX_RETRIES = 3
 local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field
 local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button
 local CHILLI_HUB_WAIT_TIME = 5 -- seconds to wait for Chilli Hub to load
+local CHECK_INTERVAL = 0.5 -- Clipboard check interval
+local MAX_CLIPBOARD_LENGTH = 200 -- Prevent excessively long strings
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -24,6 +27,8 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
+local lastClipboard = ""
+local AUTO_PASTE_ENABLED = true
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -31,7 +36,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- Helper Functions
 local function isValidJobId(jobId)
-    return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= 200
+    return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= MAX_CLIPBOARD_LENGTH
 end
 
 local function joinChilliHub(jobId)
@@ -73,6 +78,28 @@ local function joinChilliHub(jobId)
     return false
 end
 
+-- Clipboard Monitor
+local function monitorClipboard()
+    while AUTO_PASTE_ENABLED and isRunning do
+        local currentClip = readclipboard() or ""
+        
+        -- Only process if clipboard changed and contains valid Job ID
+        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+            lastClipboard = currentClip
+            print("New Job ID detected in clipboard:", string.sub(currentClip, 1, 8).."...")
+            
+            local success = joinChilliHub(currentClip)
+            if success then
+                -- Optional: Clear clipboard after successful join
+                writeclipboard("")
+                lastClipboard = ""
+            end
+        end
+        
+        task.wait(CHECK_INTERVAL)
+    end
+end
+
 -- GUI Creation
 do
     -- First remove any existing GUI
@@ -91,7 +118,7 @@ do
     screenGui.Parent = game:GetService("CoreGui")
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 550)
+    frame.Size = UDim2.new(0, 300, 0, 600) -- Increased height for new controls
     frame.Position = UDim2.new(0.5, -150, 0.3, 0)
     frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     frame.BorderSizePixel = 0
@@ -214,10 +241,22 @@ do
     serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
     serverInfoLabel.Parent = frame
 
+    -- Clipboard Status Label
+    local clipboardStatus = Instance.new("TextLabel")
+    clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
+    clipboardStatus.Position = UDim2.new(0, 20, 0, 110)
+    clipboardStatus.BackgroundTransparency = 1
+    clipboardStatus.Text = "Clipboard: Ready"
+    clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+    clipboardStatus.Font = Enum.Font.Gotham
+    clipboardStatus.TextSize = 14
+    clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
+    clipboardStatus.Parent = frame
+
     -- MPS Dropdown System
     local mpsLabel = Instance.new("TextLabel")
     mpsLabel.Size = UDim2.new(1, -40, 0, 20)
-    mpsLabel.Position = UDim2.new(0, 20, 0, 110)
+    mpsLabel.Position = UDim2.new(0, 20, 0, 135)
     mpsLabel.BackgroundTransparency = 1
     mpsLabel.Text = "Select MPS Range:"
     mpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -228,7 +267,7 @@ do
 
     local mpsDropdown = Instance.new("TextButton")
     mpsDropdown.Size = UDim2.new(1, -40, 0, 40)
-    mpsDropdown.Position = UDim2.new(0, 20, 0, 135)
+    mpsDropdown.Position = UDim2.new(0, 20, 0, 160)
     mpsDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     mpsDropdown.BorderSizePixel = 0
     mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -240,7 +279,7 @@ do
 
     local optionsFrame = Instance.new("Frame")
     optionsFrame.Size = UDim2.new(1, -40, 0, 0)
-    optionsFrame.Position = UDim2.new(0, 20, 0, 175)
+    optionsFrame.Position = UDim2.new(0, 20, 0, 200)
     optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     optionsFrame.BorderSizePixel = 0
     optionsFrame.ClipsDescendants = true
@@ -285,10 +324,34 @@ do
         end)
     end
 
+    -- Auto-Paste Toggle
+    local pasteToggle = Instance.new("TextButton")
+    pasteToggle.Size = UDim2.new(1, -40, 0, 40)
+    pasteToggle.Position = UDim2.new(0, 20, 0, 350)
+    pasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
+    pasteToggle.BorderSizePixel = 0
+    pasteToggle.Text = AUTO_PASTE_ENABLED and "AUTO-PASTE: ON" or "AUTO-PASTE: OFF"
+    pasteToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pasteToggle.Font = Enum.Font.GothamBold
+    pasteToggle.TextSize = 18
+    pasteToggle.AutoButtonColor = false
+    pasteToggle.Parent = frame
+
+    pasteToggle.MouseButton1Click:Connect(function()
+        AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
+        pasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
+        pasteToggle.Text = AUTO_PASTE_ENABLED and "AUTO-PASTE: ON" or "AUTO-PASTE: OFF"
+        clipboardStatus.Text = AUTO_PASTE_ENABLED and "Clipboard: Monitoring" or "Clipboard: Paused"
+        
+        if AUTO_PASTE_ENABLED and isRunning then
+            coroutine.wrap(monitorClipboard)()
+        end
+    end)
+
     -- Control Buttons
     local startBtn = Instance.new("TextButton")
     startBtn.Size = UDim2.new(1, -40, 0, 40)
-    startBtn.Position = UDim2.new(0, 20, 0, 320)
+    startBtn.Position = UDim2.new(0, 20, 0, 400)
     startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     startBtn.BorderSizePixel = 0
     startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -300,7 +363,7 @@ do
 
     local stopBtn = Instance.new("TextButton")
     stopBtn.Size = UDim2.new(1, -40, 0, 40)
-    stopBtn.Position = UDim2.new(0, 20, 0, 370)
+    stopBtn.Position = UDim2.new(0, 20, 0, 450)
     stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     stopBtn.BorderSizePixel = 0
     stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -312,7 +375,7 @@ do
 
     local resumeBtn = Instance.new("TextButton")
     resumeBtn.Size = UDim2.new(1, -40, 0, 40)
-    resumeBtn.Position = UDim2.new(0, 20, 0, 420)
+    resumeBtn.Position = UDim2.new(0, 20, 0, 500)
     resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     resumeBtn.BorderSizePixel = 0
     resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -510,6 +573,10 @@ startBtn.MouseButton1Click:Connect(function()
     isPaused = false
     connectionAttempts = 0
     connectWebSocket()
+    
+    if AUTO_PASTE_ENABLED then
+        coroutine.wrap(monitorClipboard)()
+    end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -542,6 +609,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
+        print("Auto-Paste:", AUTO_PASTE_ENABLED and "ON" or "OFF")
         print("=========================")
     end
 end)
@@ -564,4 +632,9 @@ task.spawn(function()
     end
 end)
 
-print("AutoJoiner fully initialized with Chilli Hub support!")
+-- Start clipboard monitoring if enabled
+if AUTO_PASTE_ENABLED and isRunning then
+    coroutine.wrap(monitorClipboard)()
+end
+
+print("AutoJoiner fully initialized with WebSocket + Clipboard support!")
