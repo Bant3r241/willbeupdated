@@ -186,29 +186,6 @@ local function joinChilliHub(jobId)
     return false
 end
 
--- Clipboard Monitor
-local function monitorClipboard()
-    while AUTO_PASTE_ENABLED and isRunning do
-        local currentClip = readclipboard() or ""
-        
-        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-            lastClipboard = currentClip
-            print("New Job ID detected:", string.sub(currentClip, 1, 8).."...")
-            
-            local success = joinChilliHub(currentClip)
-            if success then
-                print("Successfully joined via Chilli Hub!")
-                writeclipboard("")  -- Clear clipboard after success
-                lastClipboard = ""
-            else
-                warn("Failed to join via Chilli Hub, attempting direct teleport...")
-                attemptTeleport(currentClip)
-            end
-        end
-        
-        task.wait(CHECK_INTERVAL)
-    end
-end
 
 -- GUI Creation
 do
@@ -761,19 +738,19 @@ end
 
 -- Initialize
 print("AutoJoiner initialized with enhanced clipboard monitoring!")
-updateClipboardStatus() -- Force initial update
 
+-- Start continuous clipboard status updates
+coroutine.wrap(function()
+    while true do
+        updateClipboardStatus()
+        task.wait(0.3) -- Update every 0.3 seconds
+    end
+end)()
+
+-- Start clipboard monitoring if enabled
 if AUTO_PASTE_ENABLED then
     coroutine.wrap(function()
-        task.wait(1) -- Small delay to ensure GUI is loaded
-        while AUTO_PASTE_ENABLED do
-            updateClipboardStatus()
-            task.wait(0.5) -- Update status every 0.5 seconds
-        end
-    end)()
-    
-    coroutine.wrap(function()
-        task.wait(1.5) -- Slightly longer delay before monitoring starts
+        task.wait(1) -- Small delay to ensure everything is loaded
         monitorClipboard()
     end)()
 end
