@@ -1,4 +1,4 @@
--- AutoJoiner Pro v2.1 with Encoded Job ID Support
+-- AutoJoiner with Perfect BrainRot Detection (No Auto-Load)
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -22,66 +22,6 @@ local selectedMpsRange = "1M-3M"
 local selectedBrainRot = "Any"
 local connectionAttempts = 0
 local currentTab = "AutoJoiner"
-local recentServers = {} -- Tracks joined servers to prevent duplicates
-
--- =================================================================
--- NEW: Encoded Job ID Support System
--- =================================================================
-
-local function decodeCustomJobId(encodedId)
-    -- Clean common prefixes/suffixes
-    local cleanId = encodedId:gsub("room ID.-:%s*", ""):gsub("%s+", "")
-    
-    -- URL-safe Base64 adjustments
-    cleanId = cleanId:gsub("-", "+"):gsub("_", "/")
-    
-    -- Base64 requires length divisible by 4
-    local padLen = #cleanId % 4
-    if padLen > 0 then
-        cleanId = cleanId .. string.rep("=", 4 - padLen)
-    end
-    
-    -- Attempt decoding
-    local success, decoded = pcall(function()
-        return HttpService:Base64Decode(cleanId)
-    end)
-    
-    return success and decoded or encodedId -- Fallback to original if decoding fails
-end
-
-local function isValidJobId(id)
-    -- Standard Roblox IDs (40-50 alphanumeric chars)
-    if #id >= 40 and #id <= 50 and id:match("^%w+$") then
-        return true
-    end
-    
-    -- Custom encoded IDs (longer with symbols)
-    if #id >= 64 and id:match("^[%w+/=%-_]+$") then
-        return true
-    end
-    
-    return false
-end
-
-local function processJobId(rawId)
-    -- First clean the ID
-    local cleanId = rawId:gsub("JobID:%s*", ""):gsub("%s+", "")
-    
-    -- Check if it's already valid
-    if isValidJobId(cleanId) then
-        return cleanId
-    end
-    
-    -- Attempt decoding if it looks encoded
-    if #cleanId >= 64 then
-        local decoded = decodeCustomJobId(cleanId)
-        if isValidJobId(decoded) then
-            return decoded
-        end
-    end
-    
-    return nil -- Invalid ID
-end
 
 -- Enhanced BrainRot Detection
 local function detectBrainRot(serverName)
@@ -640,163 +580,112 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- =================================================================
--- UPDATED WebSocket Message Handler with Encoded ID Support
--- =================================================================
-
-local function handleWebSocketMessage(message)
-    if not isRunning or isPaused then
-        print("[DEBUG] Ignoring message - script not running")
-        return
-    end
-
-    print("[WebSocket] Raw message:", message)
-
-    -- NEW: Extract ALL potential IDs from message
-    local potentialIds = {}
-    for _, pattern in ipairs({
-        "ID:%s*([%w+/=%-_]+)", "JobID:%s*(%w+)", 
-        "([%w+/=%-_]{64,})", "(%w+/%w+=%w+)"
-    }) do
-        for found in message:gmatch(pattern) do
-            table.insert(potentialIds, found)
-        end
-    end
-
-    -- Process found IDs
-    for _, rawId in ipairs(potentialIds) do
-        local jobId = processJobId(rawId)
-        if not jobId then
-            print("Invalid ID format:", rawId)
-            goto continue
-        end
-
-        -- Extract server info
-        local serverName = message:match("Name:%s*(.-)\n") or "Unknown"
-        local mpsText = message:match("Money per sec:%s*%$(%d+%.?%d*)")
-        local playersText = message:match("Players:%s*(%d+/%d+)") or "0/0"
-
-        -- Validate required fields
-        if not mpsText then
-            statusLabel.Text = "Status: Missing MPS data"
-            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            goto continue
-        end
-
-        -- Convert MPS to number
-        local mps = tonumber(mpsText)
-        if not mps then
-            statusLabel.Text = "Status: Invalid MPS value"
-            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            goto continue
-        end
-
-        -- Apply BrainRot filter
-        local detectedBrainRot = detectBrainRot(serverName)
-        local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
-        if not brainRotMatch then
-            statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(jobId, 1, 8), selectedBrainRot)
-            statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-            goto continue
-        end
-
-        -- Apply MPS filter
-        local shouldJoin = false
-        if selectedMpsRange == "1M-3M" then
-            shouldJoin = (mps >= 1 and mps <= 3)
-        elseif selectedMpsRange == "3M-5M" then
-            shouldJoin = (mps > 3 and mps <= 5)
-        elseif selectedMpsRange == "5M+" then
-            shouldJoin = (mps > 5)
-        end
-
-        -- Take action
-        if shouldJoin then
-            statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mps, detectedBrainRot)
-            statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            if attemptTeleport(jobId) then
-                return -- Successfully joined, stop processing
-            end
-        else
-            statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mps, detectedBrainRot)
-            statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-        end
-
-        ::continue::
-    end
-
-    statusLabel.Text = "Status: No valid servers found"
-    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-end
-
--- =================================================================
--- UPDATED Teleport Function with Encoded ID Support
--- =================================================================
-
+-- WebSocket Functions
 local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
     
-    -- Cooldown check
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
         task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
     end
-
-    -- NEW: Try both encoded and decoded versions
-    local versionsToTry = {jobId}
-    if #jobId > 50 then  -- Likely encoded
-        local decoded = decodeCustomJobId(jobId)
-        if isValidJobId(decoded) then
-            table.insert(versionsToTry, 1, decoded) -- Try decoded first
-        end
+    
+    lastHopTime = os.time()
+    activeJobId = jobId
+    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
+    
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+    end)
+    
+    if not success then
+        warn("Teleport failed:", err)
+        statusLabel.Text = "Status: Failed - Retrying"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false
     end
-
-    for _, idVersion in ipairs(versionsToTry) do
-        -- Skip if recently joined
-        if recentServers[idVersion] then
-            print("Skipping recently joined server:", string.sub(idVersion, 1, 8))
-            return false
-        end
-
-        -- Attempt teleport
-        local success, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, idVersion, player)
-        end)
-
-        if success then
-            -- Update state on success
-            lastHopTime = os.time()
-            activeJobId = idVersion
-            recentServers[idVersion] = os.time() -- Track joined server
-            serverInfoLabel.Text = "Server: "..string.sub(idVersion, 1, 8).."..."
-            return true
-        else
-            warn("Teleport failed with", string.sub(idVersion, 1, 8), ":", err)
-        end
-    end
-
-    statusLabel.Text = "Status: All teleport attempts failed"
-    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-    return false
+    
+    return true
 end
 
--- =================================================================
--- NEW: Server History Cleanup Task
--- =================================================================
-
-task.spawn(function()
-    while true do
-        task.wait(300) -- Clean every 5 minutes
-        local currentTime = os.time()
-        for id, time in pairs(recentServers) do
-            if currentTime - time > 1800 then -- 30 minute expiration
-                recentServers[id] = nil
-            end
-        end
+local function handleWebSocketMessage(message)
+    if not isRunning or isPaused then  -- Ensures no filtering when stopped
+        print("[DEBUG] Ignoring message - script not running")
+        return
     end
-end)
+    
+    print("[WebSocket] Raw message:", message)
+    
+    -- Parse JSON message
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(message)
+    end)
+    
+    if not success then
+        statusLabel.Text = "Status: Invalid JSON"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse JSON:", message)
+        return
+    end
+    
+    -- Extract data from JSON
+    local jobId = data.jobId
+    local serverName = data.serverName or "Unknown"
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    
+    -- Detect brainrot type using enhanced function
+    local detectedBrainRot = detectBrainRot(serverName)
+    
+    -- Validate required fields
+    if not jobId or not mpsText then
+        statusLabel.Text = "Status: Missing data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+        return
+    end
+    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        statusLabel.Text = "Status: Invalid MPS value"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    -- Apply BrainRot filter first (if not set to "Any")
+    local brainRotMatch = (selectedBrainRot == "Any") or (detectedBrainRot == selectedBrainRot)
+    if not brainRotMatch then
+        statusLabel.Text = string.format("Skipping %s (Not %s)", string.sub(jobId, 1, 8), selectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        print(string.format("Skipped server %s - Wanted %s, got %s", string.sub(jobId, 1, 8), selectedBrainRot, detectedBrainRot))
+        return
+    end
+    
+    -- Apply MPS filter (only if BrainRot matches)
+    local shouldJoin = false
+    local mpsMillions = mps
+    
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+    elseif selectedMpsRange == "5M+" then
+        shouldJoin = (mpsMillions > 5)
+    end
+    
+    -- Take action
+    if shouldJoin then
+        statusLabel.Text = string.format("Joining %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        attemptTeleport(jobId)
+    else
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s, %s)", string.sub(jobId, 1, 8), mpsMillions, detectedBrainRot)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+    end
+    
+    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainRot: %s | Action: %s",
+        jobId, serverName, mpsMillions, detectedBrainRot, shouldJoin and "Joining" or "Skipping"))
+end
 
--- WebSocket Functions
 local function connectWebSocket()
     if not isRunning then return end
     
@@ -881,7 +770,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Selected BrainRot:", selectedBrainRot)
         print("Connection Attempts:", connectionAttempts)
         print("Current Tab:", currentTab)
-        print("Recent Servers:", #recentServers)
         print("=========================")
     end
 end)
