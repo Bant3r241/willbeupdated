@@ -541,14 +541,16 @@ local function loadSettings()
     
     if success and savedSettings then
         selectedMpsRange = savedSettings.mpsRange or "1M-3M"
-        selectedBrainRot = savedSettings.brainRot or "Any"
-        if savedSettings.autoLoad then
-            autoLoadToggle.Text = "ON"
-            autoLoadToggle.TextColor3 = Color3.fromRGB(100, 255, 100)
-            isRunning = true
-            connectWebSocket()
-        end
+        selectedBrainRot = savedSettings.brainRot or "Any"  -- Ensure default is "Any"
+        autoLoadToggle.Text = savedSettings.autoLoad and "ON" or "OFF"
+        autoLoadToggle.TextColor3 = savedSettings.autoLoad and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 255, 255)
+        -- DO NOT auto-start even if savedSettings.autoLoad is true
     else
+        selectedBrainRot = "Any"  -- Force default
+        autoLoadToggle.Text = "OFF"
+        autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end
         -- Force Auto-Load OFF if no settings exist
         autoLoadToggle.Text = "OFF"
         autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -840,4 +842,5 @@ end
 
 -- Run auto-execute after a short delay to ensure everything is loaded
 task.delay(1, autoExecute)
+
 
