@@ -37,6 +37,47 @@ local playerGui = player:WaitForChild("PlayerGui")
 local function isValidJobId(jobId)
     return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= MAX_CLIPBOARD_LENGTH
 end
+-- Enhanced Clipboard Functions
+local function updateClipboardStatus()
+    local currentClip = readclipboard() or ""
+    if currentClip == "" then
+        clipboardStatus.Text = "Clipboard: Empty"
+        clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+    elseif not isValidJobId(currentClip) then
+        clipboardStatus.Text = "Clipboard: Invalid Job ID"
+        clipboardStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+    else
+        clipboardStatus.Text = "Clipboard: Valid Job ID"
+        clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+end
+
+local function monitorClipboard()
+    while AUTO_PASTE_ENABLED and isRunning do
+        local currentClip = readclipboard() or ""
+        updateClipboardStatus()
+
+        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+            lastClipboard = currentClip
+            clipboardStatus.Text = "Processing Job ID..."
+            clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
+            
+            local success = joinChilliHub(currentClip)
+            if success then
+                clipboardStatus.Text = "Joined successfully!"
+                clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+                writeclipboard("")
+                lastClipboard = ""
+            else
+                clipboardStatus.Text = "Failed - Trying teleport"
+                clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
+                attemptTeleport(currentClip)
+            end
+        end
+        
+        task.wait(CHECK_INTERVAL)
+    end
+end
 
 local function findFirstMatchingElement(parent, className, matchFunction)
     for _, child in ipairs(parent:GetDescendants()) do
@@ -718,4 +759,13 @@ if AUTO_PASTE_ENABLED then
     coroutine.wrap(monitorClipboard)()
 end
 
-print("AutoJoiner fully initialized with all features!")
+-- Initialize
+print("AutoJoiner initialized with enhanced clipboard monitoring!")
+updateClipboardStatus() -- Initial status check
+
+if AUTO_PASTE_ENABLED then
+    coroutine.wrap(function()
+        task.wait(1) -- Small delay to ensure everything is loaded
+        monitorClipboard()
+    end)()
+end
