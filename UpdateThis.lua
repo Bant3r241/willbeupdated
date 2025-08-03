@@ -1,4 +1,4 @@
--- AutoJoiner with Perfect BrainRot Detection
+-- AutoJoiner with Perfect BrainRot Detection (No Auto-Load)
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -66,11 +66,30 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 550)
+frame.Size = UDim2.new(0, 300, 0, 500) -- Reduced height since we removed auto-load
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
+
+
+local othersTab = Instance.new("Frame")
+othersTab.Size = UDim2.new(1, 0, 1, 0)
+othersTab.BackgroundTransparency = 1
+othersTab.Visible = false
+othersTab.Parent = tabContentContainer
+tabContents["Others"] = othersTab
+
+local othersTitle = Instance.new("TextLabel")
+othersTitle.Size = UDim2.new(1, 0, 0, 30)
+othersTitle.Position = UDim2.new(0, 0, 0, 0)
+othersTitle.BackgroundTransparency = 1
+othersTitle.Text = "Other Utilities"
+othersTitle.TextColor3 = Color3.fromRGB(90, 0, 90)
+othersTitle.Font = Enum.Font.GothamBold
+othersTitle.TextSize = 22
+othersTitle.TextXAlignment = Enum.TextXAlignment.Left
+othersTitle.Parent = othersTab
 
 -- Draggable Logic
 local dragging, dragInput, dragStart, startPos
@@ -343,7 +362,7 @@ resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
 resumeBtn.Parent = autoJoinerTab
 
--- Others Tab Content
+-- Others Tab Content (Removed Auto-Load Section)
 local othersTab = Instance.new("Frame")
 othersTab.Size = UDim2.new(1, 0, 1, 0)
 othersTab.BackgroundTransparency = 1
@@ -420,7 +439,7 @@ fpsBoostBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- BrainRot Filter System
+-- BrainRot Filter System (Moved up to replace auto-load space)
 local brainRotLabel = Instance.new("TextLabel")
 brainRotLabel.Size = UDim2.new(1, 0, 0, 20)
 brainRotLabel.Position = UDim2.new(0, 0, 0, 190)
@@ -521,12 +540,11 @@ autoLoadToggle.Text = "OFF"
 autoLoadToggle.AutoButtonColor = false
 autoLoadToggle.Parent = othersTab
 
--- Settings Management
+-- Settings Management (Simplified without auto-load)
 local function saveSettings()
     local settings = {
         mpsRange = selectedMpsRange,
-        brainRot = selectedBrainRot,
-        autoLoad = autoLoadToggle.Text == "ON"
+        brainRot = selectedBrainRot
     }
     
     pcall(function()
@@ -535,21 +553,29 @@ local function saveSettings()
 end
 
 local function loadSettings()
+    -- Set defaults first
+    selectedMpsRange = "1M-3M"
+    selectedBrainRot = "Any"
+    
+    -- Try to load saved settings
     local success, savedSettings = pcall(function()
         return HttpService:JSONDecode(readfile("AutoJoinerSettings.json"))
     end)
     
     if success and savedSettings then
-        selectedMpsRange = savedSettings.mpsRange or "1M-3M"
-        selectedBrainRot = savedSettings.brainRot or "Any"  -- Ensure default is "Any"
-        autoLoadToggle.Text = savedSettings.autoLoad and "ON" or "OFF"
-        autoLoadToggle.TextColor3 = savedSettings.autoLoad and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 255, 255)
-        -- DO NOT auto-start even if savedSettings.autoLoad is true
-    else
-        selectedBrainRot = "Any"  -- Force default
-        autoLoadToggle.Text = "OFF"
-        autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        if savedSettings.mpsRange and table.find({"1M-3M", "3M-5M", "5M+"}, savedSettings.mpsRange) then
+            selectedMpsRange = savedSettings.mpsRange
+        end
+        
+        if savedSettings.brainRot and table.find(brainRotOptions, savedSettings.brainRot) then
+            selectedBrainRot = savedSettings.brainRot
+        end
     end
+    
+    -- Update UI
+    mpsDropdown.Text = selectedMpsRange.."  ▼"
+    brainRotDropdown.Text = selectedBrainRot.."  ▼"
+end
     
     -- Debug prints to verify loaded settings
     print("Loaded BrainRot Filter:", selectedBrainRot)
@@ -814,7 +840,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
--- Initialize
+-- Initialize (Removed auto-execute completely)
 loadSettings()
 switchTab("AutoJoiner")
 
@@ -825,13 +851,3 @@ player.AncestryChanged:Connect(function(_, parent)
     end
 end)
 
--- Auto-execute functionality
-local function autoExecute()
-    if autoLoadToggle.Text == "ON" then
-        isRunning = true
-        connectWebSocket()
-    end
-end
-
--- Run auto-execute after a short delay to ensure everything is loaded
-task.delay(1, autoExecute)
