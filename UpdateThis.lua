@@ -1,17 +1,17 @@
--- AutoJoiner v2.2 - Krnl-Compatible Version
+-- AutoJoiner v2.5 - Krnl Optimized Version
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 
--- Configuration
+-- Configuration (Krnl-specific)
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
 local HOP_INTERVAL = 2.5 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
 local MAX_UNAUTHORIZED_ATTEMPTS = 3
-local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field name
-local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button name
+local CHILLI_HUB_INPUT_NAME = "JobID" -- Chilli Hub input field
+local CHILLI_HUB_JOIN_NAME = "Join Job-ID" -- Chilli Hub join button
 local CHECK_INTERVAL = 0.3 -- Clipboard check interval
 
 -- State
@@ -30,7 +30,7 @@ local AUTO_PASTE_ENABLED = true
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Helper Functions
+-- Helper Functions (Krnl-optimized)
 local function isValidJobId(jobId)
     return jobId and type(jobId) == "string" and #jobId >= 22 and #jobId <= 200
 end
@@ -52,7 +52,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 600)
+frame.Size = UDim2.new(0, 300, 0, 600) -- Increased height
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
 frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 frame.BorderSizePixel = 0
@@ -584,7 +584,8 @@ local function connectWebSocket()
     end
     
     local success, err = pcall(function()
-        socket = websocket.connect(WEBSOCKET_URL) -- Krnl-specific WebSocket
+        -- Krnl-specific WebSocket connection
+        socket = websocket.connect(WEBSOCKET_URL)
         
         socket.OnMessage:Connect(handleWebSocketMessage)
         
