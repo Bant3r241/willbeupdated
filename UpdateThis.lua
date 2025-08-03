@@ -548,6 +548,12 @@ local function loadSettings()
             isRunning = true
             connectWebSocket()
         end
+    else
+        -- Force Auto-Load OFF if no settings exist
+        autoLoadToggle.Text = "OFF"
+        autoLoadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end
         
         -- Update dropdown displays
         mpsDropdown.Text = selectedMpsRange.."  ▼"
@@ -834,3 +840,4 @@ end
 
 -- Run auto-execute after a short delay to ensure everything is loaded
 task.delay(1, autoExecute)
+
