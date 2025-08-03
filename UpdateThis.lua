@@ -353,16 +353,16 @@ do
     serverInfoLabel.Parent = frame
 
     -- Clipboard Status Label
-    local clipboardStatus = Instance.new("TextLabel")
-    clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
-    clipboardStatus.Position = UDim2.new(0, 20, 0, 130)
-    clipboardStatus.BackgroundTransparency = 1
-    clipboardStatus.Text = "Clipboard: Ready"
-    clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    clipboardStatus.Font = Enum.Font.GothamMedium
-    clipboardStatus.TextSize = 14
-    clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
-    clipboardStatus.Parent = frame
+local clipboardStatus = Instance.new("TextLabel")
+clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
+clipboardStatus.Position = UDim2.new(0, 20, 0, 130)
+clipboardStatus.BackgroundTransparency = 1
+clipboardStatus.Text = "Clipboard: Ready"
+clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+clipboardStatus.Font = Enum.Font.GothamMedium
+clipboardStatus.TextSize = 14
+clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
+clipboardStatus.Parent = frame
 
     -- MPS Dropdown System
     local mpsLabel = Instance.new("TextLabel")
@@ -761,11 +761,19 @@ end
 
 -- Initialize
 print("AutoJoiner initialized with enhanced clipboard monitoring!")
-updateClipboardStatus() -- Initial status check
+updateClipboardStatus() -- Force initial update
 
 if AUTO_PASTE_ENABLED then
     coroutine.wrap(function()
-        task.wait(1) -- Small delay to ensure everything is loaded
+        task.wait(1) -- Small delay to ensure GUI is loaded
+        while AUTO_PASTE_ENABLED do
+            updateClipboardStatus()
+            task.wait(0.5) -- Update status every 0.5 seconds
+        end
+    end)()
+    
+    coroutine.wrap(function()
+        task.wait(1.5) -- Slightly longer delay before monitoring starts
         monitorClipboard()
     end)()
 end
