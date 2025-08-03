@@ -453,6 +453,15 @@ brainRotOptionsFrame.ClipsDescendants = true
 brainRotOptionsFrame.ZIndex = 2
 brainRotOptionsFrame.Parent = othersTab
 
+-- Create a ScrollingFrame to contain the options
+local brainRotScrollingFrame = Instance.new("ScrollingFrame")
+brainRotScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
+brainRotScrollingFrame.Position = UDim2.new(0, 0, 0, 0)
+brainRotScrollingFrame.BackgroundTransparency = 1
+brainRotScrollingFrame.ScrollBarThickness = 6
+brainRotScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #brainRotOptions * 40)
+brainRotScrollingFrame.Parent = brainRotOptionsFrame
+
 local isBrainRotDropdownOpen = false
 
 local function toggleBrainRotDropdown()
@@ -460,7 +469,7 @@ local function toggleBrainRotDropdown()
         brainRotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         brainRotDropdown.Text = selectedBrainRot.."  ▼"
     else
-        brainRotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #brainRotOptions * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        brainRotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, math.min(#brainRotOptions * 40, 200)), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         brainRotDropdown.Text = selectedBrainRot.."  ▲"
     end
     isBrainRotDropdownOpen = not isBrainRotDropdownOpen
@@ -480,7 +489,7 @@ for i, brainRot in ipairs(brainRotOptions) do
     option.TextSize = 18
     option.AutoButtonColor = false
     option.ZIndex = 3
-    option.Parent = brainRotOptionsFrame
+    option.Parent = brainRotScrollingFrame
     
     option.MouseButton1Click:Connect(function()
         selectedBrainRot = brainRot
