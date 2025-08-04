@@ -1,4 +1,4 @@
-print("AutoJoiner v4.9 - Clipboard Fixed Edition")
+print("AutoJoiner v4.9.1 - Clipboard Fixed Edition")
 
 -- Services
 local Players = game:GetService("Players")
@@ -7,6 +7,7 @@ local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TextService = game:GetService("TextService")
+local CoreGui = game:GetService("CoreGui")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -67,12 +68,18 @@ local function setClipboardText(text)
 end
 
 -- ==================== GUI CREATION ====================
+
+-- First check if GUI already exists to prevent duplicates
+if CoreGui:FindFirstChild("AutoJoinerGUI") then
+    CoreGui:FindFirstChild("AutoJoinerGUI"):Destroy()
+end
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoJoinerGUI"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 999
-screenGui.Parent = game:GetService("CoreGui")
+screenGui.Parent = CoreGui
 
 -- Main Frame
 local frame = Instance.new("Frame")
@@ -743,8 +750,6 @@ manualJoinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================== INITIALIZATION ====================
-
 -- Initialize GUI state
 pcall(function()
     clipboardStatus.Text = "Clipboard: Ready"
@@ -768,36 +773,5 @@ coroutine.wrap(function()
         task.wait(0.5)
     end
 end)()
-
--- Debug command to test with specific Job ID
-UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.F6 then
-        local testID = "TNmMNbvB8tkUtxOVLRuP9ZNLItPPfpvHTHvB9tmCyLPVRRvQIHDVSZuBxLUBwjORqHPUSfNVNbkTuO3Y4xvPSAFN+HkUqHys"
-        print("🧪 Testing with ID:", testID)
-        attemptTeleport(testID)
-    elseif not processed and input.KeyCode == Enum.KeyCode.F5 then
-        print("\n=== DEBUG INFO ===")
-        print("Running on:", IS_ANDROID and "Android" or "Desktop", IS_EMULATOR and "(Emulator)" or "(Real Device)")
-        print("WebSocket URL:", WEBSOCKET_URL)
-        print("Connected:", socket and "Yes" or "No")
-        print("Running:", isRunning and "Yes" or "No")
-        print("Paused:", isPaused and "Yes" or "No")
-        print("Last Job ID:", activeJobId or "None")
-        print("Selected MPS:", selectedMpsRange)
-        print("Connection Attempts:", connectionAttempts)
-        print("Auto-Paste:", AUTO_PASTE_ENABLED and "ON" or "OFF")
-        print("=========================")
-    end
-end)
-
--- Cleanup
-player.AncestryChanged:Connect(function(_, parent)
-    if not parent and socket then
-        pcall(function()
-            socket:Close()
-            socket = nil
-        end)
-    end
-end)
 
 print("⚡ AutoJoiner initialization complete!")
