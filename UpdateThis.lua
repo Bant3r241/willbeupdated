@@ -1,9 +1,10 @@
--- AutoJoiner with Clipboard Support and Perfect JSON Parsing
+-- AutoJoiner with Clipboard Support - Enhanced Version
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
+local RunService = game:GetService("RunService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -16,7 +17,7 @@ local MAX_PASTE_ATTEMPTS = 5 -- Max attempts to paste to Chilli Hub
 local ELEMENT_WAIT_TIME = 0.5 -- Time between element detection attempts
 
 -- State
-local player = Players.LocalPlayer or Players:GetPlayers()[1]
+local player = Players.LocalPlayer
 local socket = nil
 local isRunning = false
 local isPaused = false
@@ -27,57 +28,71 @@ local connectionAttempts = 0
 local lastClipboard = ""
 local AUTO_PASTE_ENABLED = true
 
--- Wait for player GUI
-repeat task.wait() until player and player:FindFirstChild("PlayerGui")
+-- Wait for player to fully load
+repeat task.wait() until player and player:IsDescendantOf(game)
 local playerGui = player:WaitForChild("PlayerGui")
+
+-- ==================== UTILITY FUNCTIONS ====================
+
+local function safeCall(func, errorHandler)
+    local success, result = pcall(func)
+    if not success then
+        if errorHandler then
+            errorHandler(result)
+        else
+            warn("Error in safeCall:", result)
+        end
+    end
+    return success, result
+end
 
 -- ==================== CLIPBOARD FUNCTIONS ====================
 
 local function getClipboardText()
-    local success, text = pcall(function()
-        -- Try different clipboard access methods
+    return safeCall(function()
         if readclipboard then
-            return readclipboard()
+            return readclipboard() or ""
         elseif toclipboard then
-            return toclipboard()
-        elseif TextService:GetStringAsync then
-            return TextService:GetStringAsync("clipboard")
+            return toclipboard() or ""
+        elseif TextService.GetStringAsync then
+            return TextService:GetStringAsync("clipboard") or ""
         end
         return ""
     end)
-    return success and text or ""
 end
 
 local function setClipboardText(text)
-    pcall(function()
+    safeCall(function()
         if writeclipboard then
-            writeclipboard(text)
+            writeclipboard(tostring(text))
         elseif toclipboard then
-            toclipboard(text)
+            toclipboard(tostring(text))
         end
     end)
 end
 
 local function isValidJobId(jobId)
-    return jobId and type(jobId) == "string" 
-           and #jobId >= 22 
-           and #jobId <= MAX_CLIPBOARD_LENGTH
-           and jobId:match("^[%w+/%-_=]+$") ~= nil
+    if not jobId or type(jobId) ~= "string" then return false end
+    if #jobId < 22 or #jobId > MAX_CLIPBOARD_LENGTH then return false end
+    return jobId:match("^[%w+/%-_=]+$") ~= nil
 end
 
 -- ==================== GUI CREATION ====================
 
+-- Create main GUI container
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoJoinerGUI"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 999
-screenGui.Parent = playerGui
+screenGui.IgnoreGuiInset = true
+screenGui.Enabled = true
 
+-- Main frame
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 300, 0, 550)
 frame.Position = UDim2.new(0.5, -150, 0.3, 0)
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
@@ -342,7 +357,7 @@ stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
 stopBtn.Parent = frame
 
--- ==================== CLIPBOARD MONITORING ====================
+-- ==================== CORE FUNCTIONALITY ====================
 
 local function updateClipboardStatus()
     local currentClip = getClipboardText()
@@ -388,8 +403,6 @@ local function monitorClipboard()
     print("🛑 Clipboard monitoring stopped")
 end
 
--- ==================== WEB SOCKET FUNCTIONS ====================
-
 local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
     if not isValidJobId(jobId) then return false end
@@ -403,7 +416,7 @@ local function attemptTeleport(jobId)
     activeJobId = jobId
     serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
     
-    local success, err = pcall(function()
+    local success, err = safeCall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
     end)
     
@@ -420,7 +433,7 @@ end
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
-    local success, data = pcall(function()
+    local success, data = safeCall(function()
         return HttpService:JSONDecode(message)
     end)
     
@@ -444,11 +457,11 @@ local function connectWebSocket()
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     
     if socket then
-        pcall(function() socket:Close() end)
+        safeCall(function() socket:Close() end)
         socket = nil
     end
     
-    local success, err = pcall(function()
+    local success, err = safeCall(function()
         socket = WebSocket.connect(WEBSOCKET_URL)
         
         socket.OnMessage:Connect(handleWebSocketMessage)
@@ -477,13 +490,18 @@ local function connectWebSocket()
     end
 end
 
--- ==================== CONTROL HANDLERS ====================
+-- ==================== EVENT HANDLERS ====================
 
 startBtn.MouseButton1Click:Connect(function()
     if isRunning then return end
     isRunning = true
     isPaused = false
     connectionAttempts = 0
+    
+    -- Ensure GUI is visible when starting
+    screenGui.Enabled = true
+    screenGui.Parent = playerGui
+    
     connectWebSocket()
     
     if AUTO_PASTE_ENABLED then
@@ -496,7 +514,7 @@ stopBtn.MouseButton1Click:Connect(function()
     isRunning = false
     isPaused = false
     if socket then
-        pcall(function() socket:Close() end)
+        safeCall(function() socket:Close() end)
         socket = nil
     end
     statusLabel.Text = "Status: Stopped"
@@ -524,7 +542,16 @@ manualJoinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Initialize
+-- ==================== INITIALIZATION ====================
+
+-- Add toggle key for GUI (RightShift)
+UserInputService.InputBegan:Connect(function(input, processed)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        screenGui.Enabled = not screenGui.Enabled
+    end
+end)
+
+-- Initialize clipboard monitoring
 coroutine.wrap(function()
     while true do
         updateClipboardStatus()
@@ -532,4 +559,6 @@ coroutine.wrap(function()
     end
 end)()
 
+-- Final GUI setup
+screenGui.Parent = playerGui
 print("⚡ AutoJoiner with Clipboard Support initialized!")
