@@ -11,6 +11,8 @@ local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
 local MAX_JOBID_LENGTH = 200 -- Maximum allowed Job ID length
 local MIN_JOBID_LENGTH = 22 -- Minimum allowed Job ID length
+local AUTO_PASTE_ENABLED = true -- Enable clipboard monitoring
+local CHECK_INTERVAL = 0.5 -- Clipboard check interval in seconds
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -21,6 +23,7 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
+local lastClipboard = ""
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -167,6 +170,18 @@ serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 serverInfoLabel.Parent = frame
 
+-- Clipboard Status Label
+local clipboardStatusLabel = Instance.new("TextLabel")
+clipboardStatusLabel.Size = UDim2.new(1, -40, 0, 20)
+clipboardStatusLabel.Position = UDim2.new(0, 20, 0, 470)
+clipboardStatusLabel.BackgroundTransparency = 1
+clipboardStatusLabel.Text = "Clipboard: Ready"
+clipboardStatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+clipboardStatusLabel.Font = Enum.Font.Gotham
+clipboardStatusLabel.TextSize = 14
+clipboardStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+clipboardStatusLabel.Parent = frame
+
 -- MPS Dropdown System
 local mpsLabel = Instance.new("TextLabel")
 mpsLabel.Size = UDim2.new(1, -40, 0, 20)
@@ -307,23 +322,39 @@ end)
 
 -- Enhanced Job ID Validation
 local function isValidJobId(jobId)
-    if not jobId or type(jobId) ~= "string" then return false end
+    if not jobId or type(jobId) ~= "string" then 
+        clipboardStatusLabel.Text = "Clipboard: Invalid type"
+        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false 
+    end
     
     -- Length validation
-    if #jobId < MIN_JOBID_LENGTH or #jobId > MAX_JOBID_LENGTH then
+    if #jobId < MIN_JOBID_LENGTH then
+        clipboardStatusLabel.Text = "Clipboard: Too short"
+        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false
+    elseif #jobId > MAX_JOBID_LENGTH then
+        clipboardStatusLabel.Text = "Clipboard: Too long"
+        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return false
     end
     
     -- Character validation (A-Z, a-z, 0-9, +, /, -, _, =)
     if not jobId:match("^[%w%+%/%-_%=]+$") then
+        clipboardStatusLabel.Text = "Clipboard: Invalid chars"
+        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return false
     end
     
     -- Additional pattern matching for Roblox Job IDs
     if not jobId:match("^%w+-%w+-%w+-%w+-%w+$") then
+        clipboardStatusLabel.Text = "Clipboard: Invalid format"
+        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return false
     end
     
+    clipboardStatusLabel.Text = "Clipboard: Valid Job ID"
+    clipboardStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
     return true
 end
 
@@ -349,6 +380,40 @@ local function safeJSONParse(jsonString)
     
     -- Final fallback with error details
     return nil, "Failed to parse JSON: "..tostring(result)
+end
+
+-- Clipboard Monitoring
+local function getClipboardText()
+    local success, text = pcall(function()
+        return UserInputService:GetClipboard()
+    end)
+    return success and text or nil
+end
+
+local function monitorClipboard()
+    while AUTO_PASTE_ENABLED and isRunning do
+        local currentClip = getClipboardText()
+        currentClip = currentClip and currentClip:gsub("%s+", "") or "" -- Remove whitespace
+        
+        -- Extra validation specific to your format
+        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+            if currentClip:find("^[%w+/=_-]+$") then -- Additional pattern check
+                lastClipboard = currentClip
+                clipboardStatusLabel.Text = "Clipboard: Processing..."
+                clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+                
+                -- Process the ID
+                if attemptTeleport(currentClip) then
+                    clipboardStatusLabel.Text = "Clipboard: Teleporting..."
+                    clipboardStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                else
+                    clipboardStatusLabel.Text = "Clipboard: Failed to teleport"
+                    clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                end
+            end
+        end
+        task.wait(CHECK_INTERVAL)
+    end
 end
 
 -- WebSocket Functions
@@ -506,6 +571,7 @@ startBtn.MouseButton1Click:Connect(function()
     isPaused = false
     connectionAttempts = 0
     connectWebSocket()
+    coroutine.wrap(monitorClipboard)()
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -538,12 +604,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
         print("Connection Attempts:", connectionAttempts)
+        print("Clipboard Content:", lastClipboard ~= "" and string.sub(lastClipboard, 1, 20).."..." or "None")
         print("=========================")
     end
 end)
 
 -- Initial validation test
-local testJobId = "108-char-example-job-id-1234567890-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890-abcdefghijklmnopqrstuvwxyz"
+local testJobId = "TpDC0bPR8xuUa8NVLxSS5VtOItFOfpPITHvB8RFWYLPVW4mPKfETQDtPhfUAGDjUqHPUSfNVNbkTuO3Y4xvPSAFN+HkUqHys"
 print("Initial Job ID validation test:", isValidJobId(testJobId) and "PASSED" or "FAILED")
 
 -- Cleanup
