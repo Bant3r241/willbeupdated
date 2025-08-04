@@ -1,4 +1,4 @@
-print("AutoJoiner v4.2 - Ultimate Complete Edition")
+print("AutoJoiner v4.7 - Ultimate Complete Enhanced Edition")
 
 -- Services
 local Players = game:GetService("Players")
@@ -55,8 +55,237 @@ frame.BorderColor3 = Color3.fromRGB(60, 60, 70)
 frame.Visible = true
 frame.Parent = screenGui
 
--- [All your original GUI creation code goes here EXACTLY as you had it]
--- Including: draggable logic, rainbow title, status labels, dropdowns, buttons, etc.
+-- Title Bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = frame
+
+-- Draggable functionality
+local dragging
+local dragInput
+local dragStart
+local startPos
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+titleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateInput(input)
+    end
+end)
+
+-- Rainbow title effect
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -60, 1, 0)
+titleLabel.Position = UDim2.new(0, 30, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "AutoJoiner v4.7"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 14
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+coroutine.wrap(function()
+    local hue = 0
+    while true do
+        titleLabel.TextColor3 = Color3.fromHSV(hue, 0.8, 1)
+        hue = (hue + 0.01) % 1
+        task.wait(0.05)
+    end
+end)()
+
+-- Minimize button
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 30, 1, 0)
+minimizeBtn.Position = UDim2.new(1, -30, 0, 0)
+minimizeBtn.BackgroundTransparency = 1
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 18
+minimizeBtn.Parent = titleBar
+
+local isMinimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        frame.Size = UDim2.new(0, 350, 0, 30)
+        minimizeBtn.Text = "+"
+    else
+        frame.Size = UDim2.new(0, 350, 0, 600)
+        minimizeBtn.Text = "-"
+    end
+end)
+
+-- Status labels
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 20)
+statusLabel.Position = UDim2.new(0, 10, 0, 40)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Disconnected"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = frame
+
+local serverInfoLabel = Instance.new("TextLabel")
+serverInfoLabel.Size = UDim2.new(1, -20, 0, 20)
+serverInfoLabel.Position = UDim2.new(0, 10, 0, 60)
+serverInfoLabel.BackgroundTransparency = 1
+serverInfoLabel.Text = "Server: None"
+serverInfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+serverInfoLabel.Font = Enum.Font.Gotham
+serverInfoLabel.TextSize = 14
+serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+serverInfoLabel.Parent = frame
+
+local clipboardStatus = Instance.new("TextLabel")
+clipboardStatus.Size = UDim2.new(1, -20, 0, 20)
+clipboardStatus.Position = UDim2.new(0, 10, 0, 80)
+clipboardStatus.BackgroundTransparency = 1
+clipboardStatus.Text = "Clipboard: Ready"
+clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+clipboardStatus.Font = Enum.Font.Gotham
+clipboardStatus.TextSize = 14
+clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
+clipboardStatus.Parent = frame
+
+-- MPS Selection Dropdown
+local mpsDropdown = Instance.new("Frame")
+mpsDropdown.Size = UDim2.new(0.9, 0, 0, 30)
+mpsDropdown.Position = UDim2.new(0.05, 0, 0, 110)
+mpsDropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+mpsDropdown.BorderSizePixel = 0
+mpsDropdown.Parent = frame
+
+local mpsDropdownButton = Instance.new("TextButton")
+mpsDropdownButton.Size = UDim2.new(1, 0, 1, 0)
+mpsDropdownButton.Position = UDim2.new(0, 0, 0, 0)
+mpsDropdownButton.BackgroundTransparency = 1
+mpsDropdownButton.Text = "MPS Range: "..selectedMpsRange
+mpsDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+mpsDropdownButton.Font = Enum.Font.Gotham
+mpsDropdownButton.TextSize = 14
+mpsDropdownButton.Parent = mpsDropdown
+
+local mpsDropdownOptions = Instance.new("Frame")
+mpsDropdownOptions.Size = UDim2.new(1, 0, 0, 120)
+mpsDropdownOptions.Position = UDim2.new(0, 0, 1, 0)
+mpsDropdownOptions.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+mpsDropdownOptions.BorderSizePixel = 0
+mpsDropdownOptions.Visible = false
+mpsDropdownOptions.Parent = mpsDropdown
+
+local function createMpsOption(text, yPos)
+    local option = Instance.new("TextButton")
+    option.Size = UDim2.new(1, 0, 0, 30)
+    option.Position = UDim2.new(0, 0, 0, yPos)
+    option.BackgroundTransparency = 1
+    option.Text = text
+    option.TextColor3 = Color3.fromRGB(200, 200, 200)
+    option.Font = Enum.Font.Gotham
+    option.TextSize = 14
+    option.Parent = mpsDropdownOptions
+    
+    option.MouseButton1Click:Connect(function()
+        selectedMpsRange = text
+        mpsDropdownButton.Text = "MPS Range: "..selectedMpsRange
+        mpsDropdownOptions.Visible = false
+    end)
+end
+
+createMpsOption("1M-3M", 0)
+createMpsOption("3M-5M", 30)
+createMpsOption("5M-9.9M", 60)
+createMpsOption("10M+", 90)
+
+mpsDropdownButton.MouseButton1Click:Connect(function()
+    mpsDropdownOptions.Visible = not mpsDropdownOptions.Visible
+end)
+
+-- Auto-Paste Toggle
+local autoPasteToggle = Instance.new("TextButton")
+autoPasteToggle.Size = UDim2.new(0.9, 0, 0, 30)
+autoPasteToggle.Position = UDim2.new(0.05, 0, 0, 250)
+autoPasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+autoPasteToggle.BorderSizePixel = 0
+autoPasteToggle.Text = "Auto-Paste: "..(AUTO_PASTE_ENABLED and "ON" or "OFF")
+autoPasteToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoPasteToggle.Font = Enum.Font.Gotham
+autoPasteToggle.TextSize = 14
+autoPasteToggle.Parent = frame
+
+autoPasteToggle.MouseButton1Click:Connect(function()
+    AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
+    autoPasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+    autoPasteToggle.Text = "Auto-Paste: "..(AUTO_PASTE_ENABLED and "ON" or "OFF")
+    
+    if AUTO_PASTE_ENABLED and isRunning then
+        coroutine.wrap(monitorClipboard)()
+    end
+end)
+
+-- Control Buttons
+local startBtn = Instance.new("TextButton")
+startBtn.Size = UDim2.new(0.9, 0, 0, 40)
+startBtn.Position = UDim2.new(0.05, 0, 0, 300)
+startBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+startBtn.BorderSizePixel = 0
+startBtn.Text = "START"
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.Font = Enum.Font.GothamBold
+startBtn.TextSize = 16
+startBtn.Parent = frame
+
+local stopBtn = Instance.new("TextButton")
+stopBtn.Size = UDim2.new(0.9, 0, 0, 40)
+stopBtn.Position = UDim2.new(0.05, 0, 0, 350)
+stopBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+stopBtn.BorderSizePixel = 0
+stopBtn.Text = "STOP"
+stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopBtn.Font = Enum.Font.GothamBold
+stopBtn.TextSize = 16
+stopBtn.Parent = frame
+
+local resumeBtn = Instance.new("TextButton")
+resumeBtn.Size = UDim2.new(0.9, 0, 0, 40)
+resumeBtn.Position = UDim2.new(0.05, 0, 0, 400)
+resumeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
+resumeBtn.BorderSizePixel = 0
+resumeBtn.Text = "RESUME"
+resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+resumeBtn.Font = Enum.Font.GothamBold
+resumeBtn.TextSize = 16
+resumeBtn.Parent = frame
 
 -- ==================== ENHANCED CORE FUNCTIONS ====================
 
@@ -218,7 +447,7 @@ local function joinChilliHub(jobId)
     return false
 end
 
-local function attemptTeleport(jobId)
+local function processJobId(jobId, mps)
     if not isRunning or isPaused then return false end
     if not isValidJobId(jobId) then return false end
     
@@ -235,6 +464,40 @@ local function attemptTeleport(jobId)
     activeJobId = jobId
     safeGUIUpdate(serverInfoLabel, "Text", "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None"))
     
+    local shouldJoin = false
+    local useChilliHub = false
+
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mps >= 1 and mps <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mps > 3 and mps <= 5)
+    elseif selectedMpsRange == "5M-9.9M" then
+        shouldJoin = (mps > 5 and mps <= 9.9)
+    elseif selectedMpsRange == "10M+" then
+        shouldJoin = (mps >= 10)
+        useChilliHub = true
+    end
+    
+    if shouldJoin then
+        safeGUIUpdate(statusLabel, "Text", string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mps))
+        safeGUIUpdate(statusLabel, "TextColor3", Color3.fromRGB(100, 255, 100))
+        
+        if useChilliHub then
+            if joinChilliHub(jobId) then
+                print("Using Chilli Hub to join 10M+ server")
+            else
+                attemptTeleport(jobId)
+            end
+        else
+            attemptTeleport(jobId)
+        end
+    else
+        safeGUIUpdate(statusLabel, "Text", string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mps))
+        safeGUIUpdate(statusLabel, "TextColor3", Color3.fromRGB(255, 150, 150))
+    end
+end
+
+local function attemptTeleport(jobId)
     print("🚀 Attempting teleport to:", string.sub(jobId, 1, 8).."...")
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
@@ -264,7 +527,7 @@ local function handleWebSocketMessage(message)
     local mps = tonumber(data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M") or 0)
     if mps > 0 then
         print("🌐 Server found:", string.sub(data.jobId, 1, 8).."...", "| MPS:", mps)
-        processJobId(data.jobId)
+        processJobId(data.jobId, mps)
     end
 end
 
