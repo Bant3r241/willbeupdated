@@ -1,4 +1,4 @@
-print("AutoJoiner v4.8 - Ultimate Complete Fixed Edition")
+print("AutoJoiner v4.9 - Clipboard Fixed Edition")
 
 -- Services
 local Players = game:GetService("Players")
@@ -6,6 +6,7 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
@@ -36,6 +37,34 @@ local IS_EMULATOR = false -- Set to true if running in emulator
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
+
+-- ==================== IMPROVED CLIPBOARD FUNCTIONS ====================
+
+local function getClipboardText()
+    local success, text = pcall(function()
+        -- Try different clipboard access methods
+        if readclipboard then
+            return readclipboard()
+        elseif toclipboard then
+            return toclipboard()
+        elseif TextService:GetStringAsync then
+            -- Alternative method for some environments
+            return TextService:GetStringAsync("clipboard")
+        end
+        return ""
+    end)
+    return success and text or ""
+end
+
+local function setClipboardText(text)
+    pcall(function()
+        if writeclipboard then
+            writeclipboard(text)
+        elseif toclipboard then
+            toclipboard(text)
+        end
+    end)
+end
 
 -- ==================== GUI CREATION ====================
 local screenGui = Instance.new("ScreenGui")
@@ -105,7 +134,7 @@ local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, -60, 1, 0)
 titleLabel.Position = UDim2.new(0, 30, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "AutoJoiner v4.8"
+titleLabel.Text = "AutoJoiner v4.9"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 14
@@ -287,6 +316,27 @@ resumeBtn.Font = Enum.Font.GothamBold
 resumeBtn.TextSize = 16
 resumeBtn.Parent = frame
 
+-- Manual Input Section
+local manualInput = Instance.new("TextBox")
+manualInput.Size = UDim2.new(0.8, 0, 0, 30)
+manualInput.Position = UDim2.new(0.1, 0, 0, 450)
+manualInput.PlaceholderText = "Enter Job ID manually"
+manualInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+manualInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualInput.Font = Enum.Font.Gotham
+manualInput.TextSize = 14
+manualInput.Parent = frame
+
+local manualJoinBtn = Instance.new("TextButton")
+manualJoinBtn.Size = UDim2.new(0.8, 0, 0, 30)
+manualJoinBtn.Position = UDim2.new(0.1, 0, 0, 490)
+manualJoinBtn.Text = "JOIN MANUALLY"
+manualJoinBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 150)
+manualJoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualJoinBtn.Font = Enum.Font.GothamBold
+manualJoinBtn.TextSize = 14
+manualJoinBtn.Parent = frame
+
 -- ==================== ENHANCED CORE FUNCTIONS ====================
 
 local function isValidJobId(jobId)
@@ -312,15 +362,8 @@ local function updateClipboardStatus()
         return false
     end
 
-    local success, currentClip = pcall(function()
-        return (readclipboard() or ""):gsub("%s+", "") -- Remove whitespace
-    end)
-    
-    if not success then
-        safeGUIUpdate(clipboardStatus, "Text", "Clipboard: Access Error")
-        safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 50, 50))
-        return false
-    end
+    local currentClip = getClipboardText()
+    currentClip = currentClip and currentClip:gsub("%s+", "") or ""
     
     if currentClip == "" then
         safeGUIUpdate(clipboardStatus, "Text", "Clipboard: Empty")
@@ -339,32 +382,25 @@ end
 local function monitorClipboard()
     print("🔄 Clipboard monitoring started")
     while AUTO_PASTE_ENABLED and isRunning do
-        local success, currentClip = pcall(function()
-            return (readclipboard() or ""):gsub("%s+", "")
-        end)
+        local currentClip = getClipboardText()
+        currentClip = currentClip and currentClip:gsub("%s+", "") or ""
         
-        if success then
-            if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-                lastClipboard = currentClip
-                safeGUIUpdate(clipboardStatus, "Text", "Processing Job ID...")
-                safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 255, 100))
-                
-                local success = joinChilliHub(currentClip)
-                if success then
-                    safeGUIUpdate(clipboardStatus, "Text", "Joined successfully!")
-                    safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(100, 255, 100))
-                    pcall(function() writeclipboard("") end)
-                    lastClipboard = ""
-                else
-                    safeGUIUpdate(clipboardStatus, "Text", "Failed - Trying teleport")
-                    safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 150, 100))
-                    attemptTeleport(currentClip)
-                end
+        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
+            lastClipboard = currentClip
+            safeGUIUpdate(clipboardStatus, "Text", "Processing Job ID...")
+            safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 255, 100))
+            
+            local success = joinChilliHub(currentClip)
+            if success then
+                safeGUIUpdate(clipboardStatus, "Text", "Joined successfully!")
+                safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(100, 255, 100))
+                setClipboardText("")
+                lastClipboard = ""
+            else
+                safeGUIUpdate(clipboardStatus, "Text", "Failed - Trying teleport")
+                safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 150, 100))
+                attemptTeleport(currentClip)
             end
-        else
-            warn("⚠️ Failed to read clipboard")
-            safeGUIUpdate(clipboardStatus, "Text", "Clipboard: Access Error")
-            safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 50, 50))
         end
         
         task.wait(CHECK_INTERVAL)
@@ -683,6 +719,28 @@ resumeBtn.MouseButton1Click:Connect(function()
     isPaused = false
     safeGUIUpdate(statusLabel, "Text", "Status: Resumed")
     safeGUIUpdate(statusLabel, "TextColor3", Color3.fromRGB(100, 255, 100))
+end)
+
+manualJoinBtn.MouseButton1Click:Connect(function()
+    local jobId = manualInput.Text:gsub("%s+", "")
+    if isValidJobId(jobId) then
+        safeGUIUpdate(clipboardStatus, "Text", "Processing Manual Job ID...")
+        safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 255, 100))
+        
+        local success = joinChilliHub(jobId)
+        if success then
+            safeGUIUpdate(clipboardStatus, "Text", "Joined successfully!")
+            safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(100, 255, 100))
+            manualInput.Text = ""
+        else
+            safeGUIUpdate(clipboardStatus, "Text", "Failed - Trying teleport")
+            safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 150, 100))
+            attemptTeleport(jobId)
+        end
+    else
+        safeGUIUpdate(clipboardStatus, "Text", "Invalid Manual Job ID")
+        safeGUIUpdate(clipboardStatus, "TextColor3", Color3.fromRGB(255, 100, 100))
+    end
 end)
 
 -- ==================== INITIALIZATION ====================
