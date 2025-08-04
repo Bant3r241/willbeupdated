@@ -1,4 +1,4 @@
-print("AutoJoiner v4.7 - Ultimate Complete Enhanced Edition")
+print("AutoJoiner v4.8 - Ultimate Complete Fixed Edition")
 
 -- Services
 local Players = game:GetService("Players")
@@ -105,7 +105,7 @@ local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, -60, 1, 0)
 titleLabel.Position = UDim2.new(0, 30, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "AutoJoiner v4.7"
+titleLabel.Text = "AutoJoiner v4.8"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 14
@@ -396,16 +396,27 @@ local function joinChilliHub(jobId)
     local inputField, joinButton
     local attempts = 0
     
+    -- Enhanced element finding with multiple strategies
     while attempts < MAX_PASTE_ATTEMPTS do
-        inputField = findFirstMatchingElement(playerGui, "TextBox", function(tb)
-            return (tb.PlaceholderText and tb.PlaceholderText:lower():find("job id")) or
-                   (tb.Name:lower():find("job")) or
-                   (tb.Text:lower():find("paste"))
-        end)
+        -- Strategy 1: Find by common names
+        inputField = playerGui:FindFirstChild("JobIDInput", true) or
+                   playerGui:FindFirstChild("JobIdInput", true) or
+                   playerGui:FindFirstChild("Job-ID Input", true) or
+                   playerGui:FindFirstChild("JobID", true) or
+                   findFirstMatchingElement(playerGui, "TextBox", function(tb)
+                       return (tb.PlaceholderText and tb.PlaceholderText:lower():find("job id")) or
+                              (tb.Name:lower():find("job")) or
+                              (tb.Text:lower():find("paste"))
+                   end)
         
-        joinButton = findFirstMatchingElement(playerGui, "TextButton", function(btn)
-            return btn.Text and btn.Text:lower():find("join")
-        end)
+        -- Strategy 2: Find by button text
+        joinButton = playerGui:FindFirstChild("Join Job-ID", true) or
+                   playerGui:FindFirstChild("JoinButton", true) or
+                   playerGui:FindFirstChild("JoinBtn", true) or
+                   playerGui:FindFirstChild("Join", true) or
+                   findFirstMatchingElement(playerGui, "TextButton", function(btn)
+                       return btn.Text and (btn.Text:lower():find("join") or btn.Text:lower():find("enter"))
+                   end)
         
         if inputField and joinButton then
             print("✅ Found Chilli Hub elements")
@@ -418,33 +429,86 @@ local function joinChilliHub(jobId)
     end
 
     if not (inputField and joinButton) then
-        warn("❌ Failed to find required elements")
+        warn("❌ Failed to find required elements after", MAX_PASTE_ATTEMPTS, "attempts")
         return false
     end
 
-    -- Enhanced pasting with verification
+    -- Enhanced input handling with focus and verification
+    local pasteSuccess = false
     for i = 1, 3 do
-        inputField.Text = jobId
-        task.wait(0.2)
-        if inputField.Text == jobId then break end
+        pcall(function()
+            -- Focus the input field first
+            if inputField:IsA("TextBox") then
+                inputField:CaptureFocus()
+                task.wait(0.1)
+            end
+            
+            -- Clear existing text and paste new ID
+            inputField.Text = ""
+            task.wait(0.1)
+            inputField.Text = jobId
+            task.wait(0.3)
+            
+            -- Verify paste was successful
+            if inputField.Text == jobId then
+                pasteSuccess = true
+                print("✅ Successfully pasted Job ID")
+            else
+                warn("⚠️ Paste verification failed (attempt", i, ")")
+            end
+        end)
+        
+        if pasteSuccess then break end
     end
 
-    -- Enhanced button clicking with verification
+    if not pasteSuccess then
+        warn("❌ Failed to paste Job ID after 3 attempts")
+        return false
+    end
+
+    -- Enhanced button clicking with visual feedback
+    local clickSuccess = false
     for i = 1, 3 do
         if joinButton:IsA("TextButton") then
             local originalText = joinButton.Text
-            joinButton.Text = "Joining..."
-            joinButton:Fire("MouseButton1Click")
-            task.wait(0.3)
+            local originalColor = joinButton.BackgroundColor3
             
-            if joinButton.Text ~= originalText then
-                return true
+            pcall(function()
+                -- Visual feedback
+                joinButton.Text = "Joining..."
+                joinButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+                task.wait(0.1)
+                
+                -- Simulate click
+                joinButton:Fire("MouseButton1Click")
+                task.wait(0.5)
+                
+                -- Check if button state changed
+                if joinButton.Text ~= originalText then
+                    clickSuccess = true
+                    print("✅ Join button click successful")
+                else
+                    warn("⚠️ Button state unchanged (attempt", i, ")")
+                end
+            end)
+            
+            -- Restore original appearance if not successful
+            if not clickSuccess then
+                joinButton.Text = originalText
+                joinButton.BackgroundColor3 = originalColor
             end
         end
+        
+        if clickSuccess then break end
+        task.wait(0.5)
     end
     
-    warn("❌ Failed to verify join button click")
-    return false
+    if not clickSuccess then
+        warn("❌ Failed to verify join button click after 3 attempts")
+        return false
+    end
+    
+    return true
 end
 
 local function processJobId(jobId, mps)
