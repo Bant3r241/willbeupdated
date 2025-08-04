@@ -1,20 +1,16 @@
--- AutoJoiner with Clipboard Support and Perfect JSON Parsing
+-- AutoJoiner with Perfect JSON Parsing, Rainbow Title, and Enhanced Validation
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
-local TextService = game:GetService("TextService")
-local RunService = game:GetService("RunService")
 
 -- Configuration
 local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp5.janeway.replit.dev/"
 local HOP_INTERVAL = 2 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
-local CHECK_INTERVAL = 0.3 -- Clipboard check interval
-local MAX_CLIPBOARD_LENGTH = 200 -- Prevent excessively long strings
-local MAX_PASTE_ATTEMPTS = 5 -- Max attempts to paste to Chilli Hub
-local ELEMENT_WAIT_TIME = 0.5 -- Time between element detection attempts
+local MAX_JOBID_LENGTH = 200 -- Maximum allowed Job ID length
+local MIN_JOBID_LENGTH = 22 -- Minimum allowed Job ID length
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -25,79 +21,15 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
-local lastClipboard = ""
-local AUTO_PASTE_ENABLED = true
-local lastServerUpdate = 0
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ==================== ENHANCED CLIPBOARD FUNCTIONS ====================
-
-local function getClipboardText()
-    local success, text = pcall(function()
-        -- Try different clipboard access methods
-        if readclipboard then
-            return readclipboard()
-        elseif toclipboard then
-            return toclipboard()
-        elseif TextService:GetStringAsync then
-            return TextService:GetStringAsync("clipboard")
-        end
-        return ""
-    end)
-    return success and text or ""
-end
-
-local function setClipboardText(text)
-    pcall(function()
-        if writeclipboard then
-            writeclipboard(text)
-        elseif toclipboard then
-            toclipboard(text)
-        end
-    end)
-end
-
--- Enhanced Job ID validation with specific format checking
-local function isValidJobId(jobId)
-    if not jobId or type(jobId) ~= "string" then return false end
-    
-    -- Length checks (minimum 22, maximum configurable)
-    if #jobId < 22 or #jobId > MAX_CLIPBOARD_LENGTH then 
-        return false 
-    end
-    
-    -- Character set validation (alphanumeric + special characters)
-    if not jobId:find("^[%w+/=_-]+$") then
-        return false
-    end
-    
-    -- Additional pattern matching for Roblox Job IDs
-    return jobId:match("[A-Za-z0-9+/][A-Za-z0-9+/][A-Za-z0-9+/][A-Za-z0-9+/]") ~= nil
-end
-
--- ==================== PERFECT JSON PARSING ====================
-
-local function safeJSONParse(jsonString)
-    local success, result = pcall(HttpService.JSONDecode, HttpService, jsonString)
-    if not success then
-        -- Try to fix common JSON issues
-        jsonString = jsonString:gsub("([^\\])'", "%1\"") -- Replace single quotes with double quotes
-        jsonString = jsonString:gsub("\\'", "'") -- Handle escaped single quotes
-        success, result = pcall(HttpService.JSONDecode, HttpService, jsonString)
-    end
-    return success and result or nil
-end
-
--- ==================== GUI CREATION ====================
-
+-- Main GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoJoinerGUI"
 screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.DisplayOrder = 999
 screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
@@ -146,7 +78,18 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Rainbow Title
+-- Rainbow Colors for Title Animation
+local rainbowColors = {
+    Color3.fromRGB(255, 0, 0),    -- Red
+    Color3.fromRGB(255, 127, 0),  -- Orange
+    Color3.fromRGB(255, 255, 0),  -- Yellow
+    Color3.fromRGB(0, 255, 0),    -- Green
+    Color3.fromRGB(0, 0, 255),    -- Blue
+    Color3.fromRGB(75, 0, 130),   -- Indigo
+    Color3.fromRGB(148, 0, 211)   -- Violet
+}
+
+-- Advanced Per-Character Rainbow Wave Title
 local titleContainer = Instance.new("Frame")
 titleContainer.Size = UDim2.new(1, -40, 0, 40)
 titleContainer.Position = UDim2.new(0, 20, 0, 15)
@@ -155,15 +98,17 @@ titleContainer.Parent = frame
 
 local titleText = "AutoJoiner"
 local charLabels = {}
-local charWidth = 18
+local charWidth = 18 -- Width of each character
 local totalWidth = #titleText * charWidth
 
+-- Create individual labels for each character
 for i = 1, #titleText do
     local charLabel = Instance.new("TextLabel")
     charLabel.Size = UDim2.new(0, charWidth, 1, 0)
     charLabel.Position = UDim2.new(0, (i-1)*charWidth, 0, 0)
     charLabel.BackgroundTransparency = 1
     charLabel.Text = titleText:sub(i,i)
+    charLabel.TextColor3 = rainbowColors[(i-1) % #rainbowColors + 1]
     charLabel.Font = Enum.Font.GothamBold
     charLabel.TextSize = 22
     charLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -171,31 +116,32 @@ for i = 1, #titleText do
     table.insert(charLabels, charLabel)
 end
 
+-- Adjust container size to fit text exactly
 titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
 
--- Rainbow animation
-local rainbowColors = {
-    Color3.fromRGB(255, 0, 0),
-    Color3.fromRGB(255, 127, 0),
-    Color3.fromRGB(255, 255, 0),
-    Color3.fromRGB(0, 255, 0),
-    Color3.fromRGB(0, 0, 255),
-    Color3.fromRGB(75, 0, 130),
-    Color3.fromRGB(148, 0, 211)
-}
-
+-- Rainbow wave animation variables
+local waveSpeed = 0.5 -- Speed of the wave effect
 local waveOffset = 0
-local function startRainbowWave()
+
+-- Advanced wave animation function
+local function startAdvancedRainbowWave()
     while true do
+        -- Update each character's color based on its position and the wave offset
         for i, label in ipairs(charLabels) do
             local colorIndex = (i + waveOffset) % #rainbowColors + 1
             label.TextColor3 = rainbowColors[colorIndex]
         end
+        
+        -- Increment the wave offset for the next frame
         waveOffset = (waveOffset + 1) % (#rainbowColors * 2)
-        task.wait(0.05)
+        
+        -- Wait for next frame
+        task.wait(waveSpeed / 10)
     end
 end
-coroutine.wrap(startRainbowWave)()
+
+-- Start the animation
+coroutine.wrap(startAdvancedRainbowWave)()
 
 -- Status Label
 local statusLabel = Instance.new("TextLabel")
@@ -221,40 +167,10 @@ serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 serverInfoLabel.Parent = frame
 
--- Clipboard Status Label
-local clipboardStatus = Instance.new("TextLabel")
-clipboardStatus.Size = UDim2.new(1, -40, 0, 20)
-clipboardStatus.Position = UDim2.new(0, 20, 0, 110)
-clipboardStatus.BackgroundTransparency = 1
-clipboardStatus.Text = "Clipboard: Ready"
-clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-clipboardStatus.Font = Enum.Font.Gotham
-clipboardStatus.TextSize = 14
-clipboardStatus.TextXAlignment = Enum.TextXAlignment.Left
-clipboardStatus.Parent = frame
-
--- Auto-Paste Toggle
-local autoPasteToggle = Instance.new("TextButton")
-autoPasteToggle.Size = UDim2.new(1, -40, 0, 30)
-autoPasteToggle.Position = UDim2.new(0, 20, 0, 135)
-autoPasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-autoPasteToggle.BorderSizePixel = 0
-autoPasteToggle.Text = "Auto-Paste: "..(AUTO_PASTE_ENABLED and "ON" or "OFF")
-autoPasteToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoPasteToggle.Font = Enum.Font.Gotham
-autoPasteToggle.TextSize = 14
-autoPasteToggle.Parent = frame
-
-autoPasteToggle.MouseButton1Click:Connect(function()
-    AUTO_PASTE_ENABLED = not AUTO_PASTE_ENABLED
-    autoPasteToggle.BackgroundColor3 = AUTO_PASTE_ENABLED and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-    autoPasteToggle.Text = "Auto-Paste: "..(AUTO_PASTE_ENABLED and "ON" or "OFF")
-end)
-
 -- MPS Dropdown System
 local mpsLabel = Instance.new("TextLabel")
 mpsLabel.Size = UDim2.new(1, -40, 0, 20)
-mpsLabel.Position = UDim2.new(0, 20, 0, 170)
+mpsLabel.Position = UDim2.new(0, 20, 0, 110)
 mpsLabel.BackgroundTransparency = 1
 mpsLabel.Text = "Select MPS Range:"
 mpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -265,7 +181,7 @@ mpsLabel.Parent = frame
 
 local mpsDropdown = Instance.new("TextButton")
 mpsDropdown.Size = UDim2.new(1, -40, 0, 40)
-mpsDropdown.Position = UDim2.new(0, 20, 0, 195)
+mpsDropdown.Position = UDim2.new(0, 20, 0, 135)
 mpsDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 mpsDropdown.BorderSizePixel = 0
 mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -277,7 +193,7 @@ mpsDropdown.Parent = frame
 
 local optionsFrame = Instance.new("Frame")
 optionsFrame.Size = UDim2.new(1, -40, 0, 0)
-optionsFrame.Position = UDim2.new(0, 20, 0, 235)
+optionsFrame.Position = UDim2.new(0, 20, 0, 175)
 optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 optionsFrame.BorderSizePixel = 0
 optionsFrame.ClipsDescendants = true
@@ -300,6 +216,7 @@ end
 
 mpsDropdown.MouseButton1Click:Connect(toggleDropdown)
 
+-- Create dropdown options
 for i, range in ipairs(mpsRanges) do
     local option = Instance.new("TextButton")
     option.Size = UDim2.new(1, 0, 0, 40)
@@ -322,31 +239,10 @@ for i, range in ipairs(mpsRanges) do
     end)
 end
 
--- Manual Input Section
-local manualInput = Instance.new("TextBox")
-manualInput.Size = UDim2.new(1, -40, 0, 30)
-manualInput.Position = UDim2.new(0, 20, 0, 380)
-manualInput.PlaceholderText = "Enter Job ID manually"
-manualInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-manualInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-manualInput.Font = Enum.Font.Gotham
-manualInput.TextSize = 14
-manualInput.Parent = frame
-
-local manualJoinBtn = Instance.new("TextButton")
-manualJoinBtn.Size = UDim2.new(1, -40, 0, 30)
-manualJoinBtn.Position = UDim2.new(0, 20, 0, 420)
-manualJoinBtn.Text = "JOIN MANUALLY"
-manualJoinBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 150)
-manualJoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-manualJoinBtn.Font = Enum.Font.GothamBold
-manualJoinBtn.TextSize = 14
-manualJoinBtn.Parent = frame
-
--- Control Buttons
+-- Start Button
 local startBtn = Instance.new("TextButton")
 startBtn.Size = UDim2.new(1, -40, 0, 40)
-startBtn.Position = UDim2.new(0, 20, 0, 460)
+startBtn.Position = UDim2.new(0, 20, 0, 320)
 startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 startBtn.BorderSizePixel = 0
 startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -356,9 +252,10 @@ startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
 startBtn.Parent = frame
 
+-- Stop Button
 local stopBtn = Instance.new("TextButton")
 stopBtn.Size = UDim2.new(1, -40, 0, 40)
-stopBtn.Position = UDim2.new(0, 20, 0, 510)
+stopBtn.Position = UDim2.new(0, 20, 0, 370)
 stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 stopBtn.BorderSizePixel = 0
 stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -368,74 +265,111 @@ stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
 stopBtn.Parent = frame
 
--- ==================== ENHANCED CLIPBOARD MONITORING ====================
+-- Resume Button
+local resumeBtn = Instance.new("TextButton")
+resumeBtn.Size = UDim2.new(1, -40, 0, 40)
+resumeBtn.Position = UDim2.new(0, 20, 0, 420)
+resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+resumeBtn.BorderSizePixel = 0
+resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+resumeBtn.Font = Enum.Font.GothamBold
+resumeBtn.TextSize = 20
+resumeBtn.Text = "Resume"
+resumeBtn.AutoButtonColor = false
+resumeBtn.Parent = frame
 
-local function updateClipboardStatus()
-    local currentClip = getClipboardText()
-    currentClip = currentClip and currentClip:gsub("%s+", "") or ""
+-- Minimize Button
+local minimizeBtn = Instance.new("ImageButton")
+minimizeBtn.Size = UDim2.new(0, 40, 0, 40)
+minimizeBtn.Position = UDim2.new(1, -40, 0, 0)
+minimizeBtn.BackgroundTransparency = 1
+minimizeBtn.Image = "rbxassetid://2398054"
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.Parent = frame
+
+local minimizedImage = Instance.new("ImageButton")
+minimizedImage.Size = UDim2.new(0, 40, 0, 40)
+minimizedImage.Position = UDim2.new(0, 20, 0, 20)
+minimizedImage.BackgroundTransparency = 1
+minimizedImage.Image = "rbxassetid://2398054"
+minimizedImage.Visible = false
+minimizedImage.Parent = screenGui
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    frame.Visible = false
+    minimizedImage.Visible = true
+end)
+
+minimizedImage.MouseButton1Click:Connect(function()
+    frame.Visible = true
+    minimizedImage.Visible = false
+end)
+
+-- Enhanced Job ID Validation
+local function isValidJobId(jobId)
+    if not jobId or type(jobId) ~= "string" then return false end
     
-    if currentClip == "" then
-        clipboardStatus.Text = "Clipboard: Empty"
-        clipboardStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
-    elseif not isValidJobId(currentClip) then
-        clipboardStatus.Text = "Clipboard: Invalid Job ID"
-        clipboardStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
-    else
-        clipboardStatus.Text = "Clipboard: Valid Job ID"
-        clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+    -- Length validation
+    if #jobId < MIN_JOBID_LENGTH or #jobId > MAX_JOBID_LENGTH then
+        return false
     end
+    
+    -- Character validation (A-Z, a-z, 0-9, +, /, -, _, =)
+    if not jobId:match("^[%w%+%/%-_%=]+$") then
+        return false
+    end
+    
+    -- Additional pattern matching for Roblox Job IDs
+    if not jobId:match("^%w+-%w+-%w+-%w+-%w+$") then
+        return false
+    end
+    
+    return true
 end
 
-local function monitorClipboard()
-    print("🔄 Clipboard monitoring started")
-    while AUTO_PASTE_ENABLED and isRunning do
-        local currentClip = getClipboardText()
-        currentClip = currentClip and currentClip:gsub("%s+", "") or "" -- Remove whitespace
-        
-        -- Extra validation specific to your format
-        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-            if currentClip:find("^[%w+/=_-]+$") then -- Additional pattern check
-                print("📋 Valid Job ID detected:", currentClip:sub(1, 8).."..."..currentClip:sub(-4))
-                lastClipboard = currentClip
-                clipboardStatus.Text = "Processing Job ID..."
-                clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
-                
-                local success = attemptTeleport(currentClip)
-                if success then
-                    clipboardStatus.Text = "Joined successfully!"
-                    clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-                    setClipboardText("")
-                    lastClipboard = ""
-                else
-                    clipboardStatus.Text = "Failed to join"
-                    clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
-                end
-            end
-        end
-        task.wait(CHECK_INTERVAL)
+-- Perfect JSON Parsing with Error Handling
+local function safeJSONParse(jsonString)
+    if not jsonString or type(jsonString) ~= "string" then
+        return nil, "Invalid input type"
     end
-    print("🛑 Clipboard monitoring stopped")
+    
+    -- First try standard parsing
+    local success, result = pcall(HttpService.JSONDecode, HttpService, jsonString)
+    if success then return result end
+    
+    -- Try to fix common JSON issues
+    local fixedJson = jsonString
+        :gsub("'", '"') -- Replace single quotes with double quotes
+        :gsub("([%w_]+)%s*=", '"%1":') -- Fix unquoted keys
+        :gsub(":%s*([^%{%}\"%s][^,%]}%s]*)", ': "%1"') -- Fix unquoted values
+    
+    -- Try parsing again
+    success, result = pcall(HttpService.JSONDecode, HttpService, fixedJson)
+    if success then return result end
+    
+    -- Final fallback with error details
+    return nil, "Failed to parse JSON: "..tostring(result)
 end
 
--- ==================== ENHANCED WEB SOCKET FUNCTIONS ====================
-
+-- WebSocket Functions
 local function attemptTeleport(jobId)
     if not isRunning or isPaused then return false end
-    if not isValidJobId(jobId) then return false end
+    
+    -- Validate jobId before attempting teleport
+    if not isValidJobId(jobId) then
+        statusLabel.Text = "Status: Invalid Job ID"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return false
+    end
     
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
-        local waitTime = HOP_INTERVAL - (currentTime - lastHopTime)
-        statusLabel.Text = string.format("Waiting %.1fs...", waitTime)
-        task.wait(waitTime)
+        task.wait(HOP_INTERVAL - (currentTime - lastHopTime))
     end
     
     lastHopTime = os.time()
     activeJobId = jobId
-    
-    -- Truncate for display but keep full ID for teleport
-    local displayId = #jobId > 12 and (jobId:sub(1, 8).."..."..jobId:sub(-4)) or jobId
-    serverInfoLabel.Text = "Server: "..displayId
+    serverInfoLabel.Text = "Server: "..(jobId and string.sub(jobId, 1, 8).."..." or "None")
     
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
@@ -454,17 +388,72 @@ end
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
-    local data = safeJSONParse(message)
-    if not data or not data.jobId then
+    print("[WebSocket] Raw message:", message)
+    
+    -- Parse JSON message with enhanced error handling
+    local data, err = safeJSONParse(message)
+    if not data then
         statusLabel.Text = "Status: Invalid JSON"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse JSON:", err)
+        return
+    end
+    
+    -- Extract data from JSON with validation
+    local jobId = data.jobId
+    local serverName = data.serverName
+    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    
+    -- Validate required fields
+    if not jobId or not mpsText then
+        statusLabel.Text = "Status: Missing data"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing jobId or moneyPerSec in:", data)
+        return
+    end
+    
+    -- Validate jobId format
+    if not isValidJobId(jobId) then
+        statusLabel.Text = "Status: Invalid Job ID"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Invalid Job ID format:", jobId)
+        return
+    end
+    
+    -- Convert MPS to number
+    local mps = tonumber(mpsText)
+    if not mps then
+        statusLabel.Text = "Status: Invalid MPS value"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
+    
+    -- Apply MPS filter
+    local shouldJoin = false
+    local mpsMillions = mps -- Already in millions
 
-    local mps = tonumber(data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M") or 0)
-    if mps > 0 then
-        processJobId(data.jobId, mps)
+    if selectedMpsRange == "1M-3M" then
+        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
+    elseif selectedMpsRange == "3M-5M" then
+        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
+    elseif selectedMpsRange == "5M-9.9M" then
+        shouldJoin = (mpsMillions > 5 and mpsMillions <= 9.9)
+    elseif selectedMpsRange == "10M+" then
+        shouldJoin = (mpsMillions >= 10)
     end
+    
+    -- Take action
+    if shouldJoin then
+        statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        attemptTeleport(jobId)
+    else
+        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+    end
+    
+    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | Action: %s",
+        jobId, serverName or "N/A", mpsMillions, shouldJoin and "Joining" or "Skipping"))
 end
 
 local function connectWebSocket()
@@ -474,6 +463,7 @@ local function connectWebSocket()
     statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     
+    -- Close existing connection
     if socket then
         pcall(function() socket:Close() end)
         socket = nil
@@ -485,7 +475,7 @@ local function connectWebSocket()
         socket.OnMessage:Connect(handleWebSocketMessage)
         
         socket.OnClose:Connect(function()
-            if isRunning and connectionAttempts < MAX_RETRIES then
+            if isRunning and not isPaused and connectionAttempts < MAX_RETRIES then
                 task.wait(RECONNECT_DELAY)
                 connectWebSocket()
             end
@@ -497,6 +487,7 @@ local function connectWebSocket()
     end)
     
     if not success then
+        print("[ERROR] Connection failed:", err)
         if connectionAttempts < MAX_RETRIES then
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
@@ -508,18 +499,13 @@ local function connectWebSocket()
     end
 end
 
--- ==================== CONTROL HANDLERS ====================
-
+-- Control Handlers
 startBtn.MouseButton1Click:Connect(function()
     if isRunning then return end
     isRunning = true
     isPaused = false
     connectionAttempts = 0
     connectWebSocket()
-    
-    if AUTO_PASTE_ENABLED then
-        coroutine.wrap(monitorClipboard)()
-    end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -534,35 +520,35 @@ stopBtn.MouseButton1Click:Connect(function()
     statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 end)
 
-manualJoinBtn.MouseButton1Click:Connect(function()
-    local jobId = manualInput.Text:gsub("%s+", "")
-    if isValidJobId(jobId) then
-        clipboardStatus.Text = "Processing Manual Job ID..."
-        clipboardStatus.TextColor3 = Color3.fromRGB(255, 255, 100)
-        
-        local success = attemptTeleport(jobId)
-        if success then
-            clipboardStatus.Text = "Joined successfully!"
-            clipboardStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-            manualInput.Text = ""
-        else
-            clipboardStatus.Text = "Failed to join"
-            clipboardStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
-        end
-    else
-        clipboardStatus.Text = "Invalid Manual Job ID"
-        clipboardStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+resumeBtn.MouseButton1Click:Connect(function()
+    if not isRunning or not isPaused then return end
+    isPaused = false
+    statusLabel.Text = "Status: Resumed"
+    statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+end)
+
+-- Debugging
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.F5 then
+        print("\n=== DEBUG INFO ===")
+        print("WebSocket URL:", WEBSOCKET_URL)
+        print("Connected:", socket and "Yes" or "No")
+        print("Running:", isRunning and "Yes" or "No")
+        print("Paused:", isPaused and "Yes" or "No")
+        print("Last Job ID:", activeJobId or "None")
+        print("Selected MPS:", selectedMpsRange)
+        print("Connection Attempts:", connectionAttempts)
+        print("=========================")
     end
 end)
 
--- Initialize
-coroutine.wrap(function()
-    while true do
-        updateClipboardStatus()
-        task.wait(0.5)
-    end
-end)()
+-- Initial validation test
+local testJobId = "108-char-example-job-id-1234567890-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890-abcdefghijklmnopqrstuvwxyz"
+print("Initial Job ID validation test:", isValidJobId(testJobId) and "PASSED" or "FAILED")
 
-print("⚡ AutoJoiner with Clipboard Support and Perfect JSON Parsing initialized!")
-print("Testing Job ID validation:")
-print(isValidJobId("TpDC0bPR8xuUa8NVLxSS5VtOItFOfpPITHvB8RFWYLPVW4mPKfETQDtPhfUAGDjUqHPUSfNVNbkTuO3Y4xvPSAFN+HkUqHys")) -- Should return true
+-- Cleanup
+player.AncestryChanged:Connect(function(_, parent)
+    if not parent and socket then
+        pcall(function() socket:Close() end)
+    end
+end)
