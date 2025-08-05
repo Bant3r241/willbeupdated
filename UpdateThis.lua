@@ -1,4 +1,4 @@
--- AutoJoiner with Perfect JSON Parsing, Rainbow Title, and Enhanced Validation
+-- AutoJoiner with Perfect JSON Parsing, Rainbow Title, and Brainrot Filters
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -9,10 +9,6 @@ local WEBSOCKET_URL = "wss://cd9df660-ee00-4af8-ba05-5112f2b5f870-00-xh16qzp1xfp
 local HOP_INTERVAL = 2 -- seconds between hops
 local RECONNECT_DELAY = 5
 local MAX_RETRIES = 3
-local MAX_JOBID_LENGTH = 200 -- Maximum allowed Job ID length
-local MIN_JOBID_LENGTH = 22 -- Minimum allowed Job ID length
-local AUTO_PASTE_ENABLED = true -- Enable clipboard monitoring
-local CHECK_INTERVAL = 0.5 -- Clipboard check interval in seconds
 
 -- State
 local player = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -23,7 +19,20 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
-local lastClipboard = ""
+local selectedBrainrots = {} -- Table to store selected brainrots
+
+-- Brainrot options
+local brainrotOptions = {
+    "Chicleteira Bicicleteira",
+    "Pot Hotspot",
+    "Graipuss Medussi",
+    "Bubble Gum Bicycle",
+    "Hot Pot Spot",
+    "Grapefruit Medusa",
+    "Chicle Bici",
+    "Marijuana Hotspot",
+    "Grape Medusa"
+}
 
 -- Wait for player GUI
 repeat task.wait() until player and player:FindFirstChild("PlayerGui")
@@ -146,57 +155,108 @@ end
 -- Start the animation
 coroutine.wrap(startAdvancedRainbowWave)()
 
--- Status Label
+-- Tab System
+local tabFrame = Instance.new("Frame")
+tabFrame.Size = UDim2.new(1, -40, 0, 30)
+tabFrame.Position = UDim2.new(0, 20, 0, 60)
+tabFrame.BackgroundTransparency = 1
+tabFrame.Parent = frame
+
+local mainTab = Instance.new("TextButton")
+mainTab.Size = UDim2.new(0.5, -5, 1, 0)
+mainTab.Position = UDim2.new(0, 0, 0, 0)
+mainTab.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+mainTab.BorderSizePixel = 0
+mainTab.Text = "Main"
+mainTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+mainTab.Font = Enum.Font.GothamBold
+mainTab.TextSize = 14
+mainTab.Parent = tabFrame
+
+local filtersTab = Instance.new("TextButton")
+filtersTab.Size = UDim2.new(0.5, -5, 1, 0)
+filtersTab.Position = UDim2.new(0.5, 5, 0, 0)
+filtersTab.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+filtersTab.BorderSizePixel = 0
+filtersTab.Text = "Filters"
+filtersTab.TextColor3 = Color3.fromRGB(200, 200, 200)
+filtersTab.Font = Enum.Font.GothamBold
+filtersTab.TextSize = 14
+filtersTab.Parent = tabFrame
+
+-- Content Frames
+local mainContent = Instance.new("Frame")
+mainContent.Size = UDim2.new(1, -40, 0, 430)
+mainContent.Position = UDim2.new(0, 20, 0, 95)
+mainContent.BackgroundTransparency = 1
+mainContent.Visible = true
+mainContent.Parent = frame
+
+local filtersContent = Instance.new("Frame")
+filtersContent.Size = UDim2.new(1, -40, 0, 430)
+filtersContent.Position = UDim2.new(0, 20, 0, 95)
+filtersContent.BackgroundTransparency = 1
+filtersContent.Visible = false
+filtersContent.Parent = frame
+
+-- Tab switching
+mainTab.MouseButton1Click:Connect(function()
+    mainContent.Visible = true
+    filtersContent.Visible = false
+    mainTab.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    filtersTab.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    mainTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    filtersTab.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+filtersTab.MouseButton1Click:Connect(function()
+    mainContent.Visible = false
+    filtersContent.Visible = true
+    mainTab.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    filtersTab.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    mainTab.TextColor3 = Color3.fromRGB(200, 200, 200)
+    filtersTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+end)
+
+-- Status Label (in main content)
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -40, 0, 20)
-statusLabel.Position = UDim2.new(0, 20, 0, 60)
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: Disconnected"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.Font = Enum.Font.Gotham
 statusLabel.TextSize = 14
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.Parent = frame
+statusLabel.Parent = mainContent
 
--- Server Info Label
+-- Server Info Label (in main content)
 local serverInfoLabel = Instance.new("TextLabel")
-serverInfoLabel.Size = UDim2.new(1, -40, 0, 20)
-serverInfoLabel.Position = UDim2.new(0, 20, 0, 85)
+serverInfoLabel.Size = UDim2.new(1, 0, 0, 20)
+serverInfoLabel.Position = UDim2.new(0, 0, 0, 25)
 serverInfoLabel.BackgroundTransparency = 1
 serverInfoLabel.Text = "Server: None"
 serverInfoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
 serverInfoLabel.Font = Enum.Font.Gotham
 serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
-serverInfoLabel.Parent = frame
+serverInfoLabel.Parent = mainContent
 
--- Clipboard Status Label
-local clipboardStatusLabel = Instance.new("TextLabel")
-clipboardStatusLabel.Size = UDim2.new(1, -40, 0, 20)
-clipboardStatusLabel.Position = UDim2.new(0, 20, 0, 470)
-clipboardStatusLabel.BackgroundTransparency = 1
-clipboardStatusLabel.Text = "Clipboard: Ready"
-clipboardStatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-clipboardStatusLabel.Font = Enum.Font.Gotham
-clipboardStatusLabel.TextSize = 14
-clipboardStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-clipboardStatusLabel.Parent = frame
-
--- MPS Dropdown System
+-- MPS Dropdown System (in main content)
 local mpsLabel = Instance.new("TextLabel")
-mpsLabel.Size = UDim2.new(1, -40, 0, 20)
-mpsLabel.Position = UDim2.new(0, 20, 0, 110)
+mpsLabel.Size = UDim2.new(1, 0, 0, 20)
+mpsLabel.Position = UDim2.new(0, 0, 0, 50)
 mpsLabel.BackgroundTransparency = 1
 mpsLabel.Text = "Select MPS Range:"
 mpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 mpsLabel.Font = Enum.Font.GothamBold
 mpsLabel.TextSize = 18
 mpsLabel.TextXAlignment = Enum.TextXAlignment.Left
-mpsLabel.Parent = frame
+mpsLabel.Parent = mainContent
 
 local mpsDropdown = Instance.new("TextButton")
-mpsDropdown.Size = UDim2.new(1, -40, 0, 40)
-mpsDropdown.Position = UDim2.new(0, 20, 0, 135)
+mpsDropdown.Size = UDim2.new(1, 0, 0, 40)
+mpsDropdown.Position = UDim2.new(0, 0, 0, 75)
 mpsDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 mpsDropdown.BorderSizePixel = 0
 mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -204,34 +264,34 @@ mpsDropdown.Font = Enum.Font.GothamBold
 mpsDropdown.TextSize = 18
 mpsDropdown.Text = "1M-3M  ▼"
 mpsDropdown.AutoButtonColor = false
-mpsDropdown.Parent = frame
+mpsDropdown.Parent = mainContent
 
-local optionsFrame = Instance.new("Frame")
-optionsFrame.Size = UDim2.new(1, -40, 0, 0)
-optionsFrame.Position = UDim2.new(0, 20, 0, 175)
-optionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-optionsFrame.BorderSizePixel = 0
-optionsFrame.ClipsDescendants = true
-optionsFrame.ZIndex = 2
-optionsFrame.Parent = frame
+local mpsOptionsFrame = Instance.new("Frame")
+mpsOptionsFrame.Size = UDim2.new(1, 0, 0, 0)
+mpsOptionsFrame.Position = UDim2.new(0, 0, 0, 115)
+mpsOptionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mpsOptionsFrame.BorderSizePixel = 0
+mpsOptionsFrame.ClipsDescendants = true
+mpsOptionsFrame.ZIndex = 2
+mpsOptionsFrame.Parent = mainContent
 
 local mpsRanges = {"1M-3M", "3M-5M", "5M-9.9M", "10M+"}
-local isDropdownOpen = false
+local isMpsDropdownOpen = false
 
-local function toggleDropdown()
-    if isDropdownOpen then
-        optionsFrame:TweenSize(UDim2.new(1, -40, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+local function toggleMpsDropdown()
+    if isMpsDropdownOpen then
+        mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▼"
     else
-        optionsFrame:TweenSize(UDim2.new(1, -40, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
         mpsDropdown.Text = selectedMpsRange.."  ▲"
     end
-    isDropdownOpen = not isDropdownOpen
+    isMpsDropdownOpen = not isMpsDropdownOpen
 end
 
-mpsDropdown.MouseButton1Click:Connect(toggleDropdown)
+mpsDropdown.MouseButton1Click:Connect(toggleMpsDropdown)
 
--- Create dropdown options
+-- Create MPS dropdown options
 for i, range in ipairs(mpsRanges) do
     local option = Instance.new("TextButton")
     option.Size = UDim2.new(1, 0, 0, 40)
@@ -244,20 +304,142 @@ for i, range in ipairs(mpsRanges) do
     option.TextSize = 18
     option.AutoButtonColor = false
     option.ZIndex = 3
-    option.Parent = optionsFrame
+    option.Parent = mpsOptionsFrame
     
     option.MouseButton1Click:Connect(function()
         selectedMpsRange = range
-        toggleDropdown()
+        toggleMpsDropdown()
         statusLabel.Text = "Status: Filter set to "..range
         statusLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
     end)
 end
 
--- Start Button
+-- Brainrot Filter UI (in filters content)
+local brainrotLabel = Instance.new("TextLabel")
+brainrotLabel.Size = UDim2.new(1, 0, 0, 20)
+brainrotLabel.Position = UDim2.new(0, 0, 0, 0)
+brainrotLabel.BackgroundTransparency = 1
+brainrotLabel.Text = "Select Brainrots:"
+brainrotLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+brainrotLabel.Font = Enum.Font.GothamBold
+brainrotLabel.TextSize = 18
+brainrotLabel.TextXAlignment = Enum.TextXAlignment.Left
+brainrotLabel.Parent = filtersContent
+
+local brainrotDropdown = Instance.new("TextButton")
+brainrotDropdown.Size = UDim2.new(1, 0, 0, 40)
+brainrotDropdown.Position = UDim2.new(0, 0, 0, 25)
+brainrotDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+brainrotDropdown.BorderSizePixel = 0
+brainrotDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+brainrotDropdown.Font = Enum.Font.GothamBold
+brainrotDropdown.TextSize = 18
+brainrotDropdown.Text = "Select Brainrots ▼"
+brainrotDropdown.AutoButtonColor = false
+brainrotDropdown.Parent = filtersContent
+
+local brainrotOptionsFrame = Instance.new("Frame")
+brainrotOptionsFrame.Size = UDim2.new(1, 0, 0, 0)
+brainrotOptionsFrame.Position = UDim2.new(0, 0, 0, 65)
+brainrotOptionsFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+brainrotOptionsFrame.BorderSizePixel = 0
+brainrotOptionsFrame.ClipsDescendants = true
+brainrotOptionsFrame.ZIndex = 2
+brainrotOptionsFrame.Parent = filtersContent
+
+local isBrainrotDropdownOpen = false
+
+local function toggleBrainrotDropdown()
+    if isBrainrotDropdownOpen then
+        brainrotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        brainrotDropdown.Text = #selectedBrainrots > 0 and ("Selected: "..#selectedBrainrots.." ▼") or "Select Brainrots ▼"
+    else
+        brainrotOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #brainrotOptions * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
+        brainrotDropdown.Text = #selectedBrainrots > 0 and ("Selected: "..#selectedBrainrots.." ▲") or "Select Brainrots ▲"
+    end
+    isBrainrotDropdownOpen = not isBrainrotDropdownOpen
+end
+
+brainrotDropdown.MouseButton1Click:Connect(toggleBrainrotDropdown)
+
+-- Create brainrot dropdown options with checkboxes
+for i, brainrot in ipairs(brainrotOptions) do
+    local optionFrame = Instance.new("Frame")
+    optionFrame.Size = UDim2.new(1, 0, 0, 40)
+    optionFrame.Position = UDim2.new(0, 0, 0, (i-1)*40)
+    optionFrame.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    optionFrame.BorderSizePixel = 0
+    optionFrame.ZIndex = 3
+    optionFrame.Parent = brainrotOptionsFrame
+    
+    local checkbox = Instance.new("Frame")
+    checkbox.Size = UDim2.new(0, 20, 0, 20)
+    checkbox.Position = UDim2.new(0, 10, 0.5, -10)
+    checkbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    checkbox.BorderSizePixel = 0
+    checkbox.ZIndex = 4
+    checkbox.Parent = optionFrame
+    
+    local checkmark = Instance.new("TextLabel")
+    checkmark.Size = UDim2.new(1, 0, 1, 0)
+    checkmark.Position = UDim2.new(0, 0, 0, 0)
+    checkmark.BackgroundTransparency = 1
+    checkmark.Text = "✓"
+    checkmark.TextColor3 = Color3.fromRGB(0, 255, 0)
+    checkmark.Font = Enum.Font.GothamBold
+    checkmark.TextSize = 18
+    checkmark.Visible = false
+    checkmark.ZIndex = 5
+    checkmark.Parent = checkbox
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -40, 1, 0)
+    label.Position = UDim2.new(0, 40, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = brainrot
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
+    label.Parent = optionFrame
+    
+    -- Check if this brainrot is selected
+    for _, selected in ipairs(selectedBrainrots) do
+        if selected == brainrot then
+            checkmark.Visible = true
+            checkbox.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            break
+        end
+    end
+    
+    optionFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local isSelected = checkmark.Visible
+            checkmark.Visible = not isSelected
+            
+            if checkmark.Visible then
+                checkbox.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+                table.insert(selectedBrainrots, brainrot)
+            else
+                checkbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                for i, selected in ipairs(selectedBrainrots) do
+                    if selected == brainrot then
+                        table.remove(selectedBrainrots, i)
+                        break
+                    end
+                end
+            end
+            
+            brainrotDropdown.Text = #selectedBrainrots > 0 and ("Selected: "..#selectedBrainrots.." ▼") or "Select Brainrots ▼"
+        end
+    end)
+end
+
+-- Start Button (in main content)
 local startBtn = Instance.new("TextButton")
-startBtn.Size = UDim2.new(1, -40, 0, 40)
-startBtn.Position = UDim2.new(0, 20, 0, 320)
+startBtn.Size = UDim2.new(1, 0, 0, 40)
+startBtn.Position = UDim2.new(0, 0, 0, 160)
 startBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 startBtn.BorderSizePixel = 0
 startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -265,12 +447,12 @@ startBtn.Font = Enum.Font.GothamBold
 startBtn.TextSize = 20
 startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
-startBtn.Parent = frame
+startBtn.Parent = mainContent
 
--- Stop Button
+-- Stop Button (in main content)
 local stopBtn = Instance.new("TextButton")
-stopBtn.Size = UDim2.new(1, -40, 0, 40)
-stopBtn.Position = UDim2.new(0, 20, 0, 370)
+stopBtn.Size = UDim2.new(1, 0, 0, 40)
+stopBtn.Position = UDim2.new(0, 0, 0, 210)
 stopBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 stopBtn.BorderSizePixel = 0
 stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -278,12 +460,12 @@ stopBtn.Font = Enum.Font.GothamBold
 stopBtn.TextSize = 20
 stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
-stopBtn.Parent = frame
+stopBtn.Parent = mainContent
 
--- Resume Button
+-- Resume Button (in main content)
 local resumeBtn = Instance.new("TextButton")
-resumeBtn.Size = UDim2.new(1, -40, 0, 40)
-resumeBtn.Position = UDim2.new(0, 20, 0, 420)
+resumeBtn.Size = UDim2.new(1, 0, 0, 40)
+resumeBtn.Position = UDim2.new(0, 0, 0, 260)
 resumeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 resumeBtn.BorderSizePixel = 0
 resumeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -291,7 +473,7 @@ resumeBtn.Font = Enum.Font.GothamBold
 resumeBtn.TextSize = 20
 resumeBtn.Text = "Resume"
 resumeBtn.AutoButtonColor = false
-resumeBtn.Parent = frame
+resumeBtn.Parent = mainContent
 
 -- Minimize Button
 local minimizeBtn = Instance.new("ImageButton")
@@ -320,112 +502,25 @@ minimizedImage.MouseButton1Click:Connect(function()
     minimizedImage.Visible = false
 end)
 
--- Enhanced Job ID Validation
-local function isValidJobId(jobId)
-    if not jobId or type(jobId) ~= "string" then 
-        clipboardStatusLabel.Text = "Clipboard: Invalid type"
-        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false 
-    end
-    
-    -- Length validation
-    if #jobId < MIN_JOBID_LENGTH then
-        clipboardStatusLabel.Text = "Clipboard: Too short"
-        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    elseif #jobId > MAX_JOBID_LENGTH then
-        clipboardStatusLabel.Text = "Clipboard: Too long"
-        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    end
-    
-    -- Character validation (A-Z, a-z, 0-9, +, /, -, _, =)
-    if not jobId:match("^[%w%+%/%-_%=]+$") then
-        clipboardStatusLabel.Text = "Clipboard: Invalid chars"
-        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    end
-    
-    -- Additional pattern matching for Roblox Job IDs
-    if not jobId:match("^%w+-%w+-%w+-%w+-%w+$") then
-        clipboardStatusLabel.Text = "Clipboard: Invalid format"
-        clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
-    end
-    
-    clipboardStatusLabel.Text = "Clipboard: Valid Job ID"
-    clipboardStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    return true
-end
-
--- Perfect JSON Parsing with Error Handling
-local function safeJSONParse(jsonString)
-    if not jsonString or type(jsonString) ~= "string" then
-        return nil, "Invalid input type"
-    end
-    
-    -- First try standard parsing
-    local success, result = pcall(HttpService.JSONDecode, HttpService, jsonString)
-    if success then return result end
-    
-    -- Try to fix common JSON issues
-    local fixedJson = jsonString
-        :gsub("'", '"') -- Replace single quotes with double quotes
-        :gsub("([%w_]+)%s*=", '"%1":') -- Fix unquoted keys
-        :gsub(":%s*([^%{%}\"%s][^,%]}%s]*)", ': "%1"') -- Fix unquoted values
-    
-    -- Try parsing again
-    success, result = pcall(HttpService.JSONDecode, HttpService, fixedJson)
-    if success then return result end
-    
-    -- Final fallback with error details
-    return nil, "Failed to parse JSON: "..tostring(result)
-end
-
--- Clipboard Monitoring
-local function getClipboardText()
-    local success, text = pcall(function()
-        return UserInputService:GetClipboard()
-    end)
-    return success and text or nil
-end
-
-local function monitorClipboard()
-    while AUTO_PASTE_ENABLED and isRunning do
-        local currentClip = getClipboardText()
-        currentClip = currentClip and currentClip:gsub("%s+", "") or "" -- Remove whitespace
-        
-        -- Extra validation specific to your format
-        if currentClip ~= lastClipboard and isValidJobId(currentClip) then
-            if currentClip:find("^[%w+/=_-]+$") then -- Additional pattern check
-                lastClipboard = currentClip
-                clipboardStatusLabel.Text = "Clipboard: Processing..."
-                clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
-                
-                -- Process the ID
-                if attemptTeleport(currentClip) then
-                    clipboardStatusLabel.Text = "Clipboard: Teleporting..."
-                    clipboardStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-                else
-                    clipboardStatusLabel.Text = "Clipboard: Failed to teleport"
-                    clipboardStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-                end
-            end
-        end
-        task.wait(CHECK_INTERVAL)
-    end
-end
-
 -- WebSocket Functions
-local function attemptTeleport(jobId)
-    if not isRunning or isPaused then return false end
-    
-    -- Validate jobId before attempting teleport
-    if not isValidJobId(jobId) then
-        statusLabel.Text = "Status: Invalid Job ID"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        return false
+local function isBrainrotMatch(serverName)
+    if not serverName or #selectedBrainrots == 0 then
+        return true -- No filter or no brainrots selected means match
     end
+    
+    serverName = string.lower(serverName)
+    
+    for _, brainrot in ipairs(selectedBrainrots) do
+        if string.find(serverName, string.lower(brainrot), 1, true) then
+            return true
+        end
+    end
+    
+    return false
+end
+
+local function attemptTeleport(jobId, serverName)
+    if not isRunning or isPaused then return false end
     
     local currentTime = os.time()
     if currentTime - lastHopTime < HOP_INTERVAL then
@@ -455,16 +550,19 @@ local function handleWebSocketMessage(message)
     
     print("[WebSocket] Raw message:", message)
     
-    -- Parse JSON message with enhanced error handling
-    local data, err = safeJSONParse(message)
-    if not data then
+    -- Parse JSON message
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(message)
+    end)
+    
+    if not success then
         statusLabel.Text = "Status: Invalid JSON"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse JSON:", err)
+        print("[ERROR] Failed to parse JSON:", message)
         return
     end
     
-    -- Extract data from JSON with validation
+    -- Extract data from JSON
     local jobId = data.jobId
     local serverName = data.serverName
     local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
@@ -474,14 +572,6 @@ local function handleWebSocketMessage(message)
         statusLabel.Text = "Status: Missing data"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         print("[ERROR] Missing jobId or moneyPerSec in:", data)
-        return
-    end
-    
-    -- Validate jobId format
-    if not isValidJobId(jobId) then
-        statusLabel.Text = "Status: Invalid Job ID"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Invalid Job ID format:", jobId)
         return
     end
     
@@ -507,18 +597,31 @@ local function handleWebSocketMessage(message)
         shouldJoin = (mpsMillions >= 10)
     end
     
+    -- Apply brainrot filter if any brainrots are selected
+    if #selectedBrainrots > 0 then
+        local brainrotMatch = isBrainrotMatch(serverName)
+        if brainrotMatch then
+            -- Brainrot matches, override MPS filter
+            shouldJoin = true
+        else
+            -- No brainrot match, respect MPS filter
+            -- (shouldJoin remains whatever the MPS filter determined)
+        end
+    end
+    
     -- Take action
     if shouldJoin then
         statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
         statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId)
+        attemptTeleport(jobId, serverName)
     else
         statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
         statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
     end
     
-    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | Action: %s",
-        jobId, serverName or "N/A", mpsMillions, shouldJoin and "Joining" or "Skipping"))
+    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainrotMatch: %s | Action: %s",
+        jobId, serverName or "N/A", mpsMillions, #selectedBrainrots > 0 and isBrainrotMatch(serverName) or "N/A", 
+        shouldJoin and "Joining" or "Skipping"))
 end
 
 local function connectWebSocket()
@@ -571,7 +674,6 @@ startBtn.MouseButton1Click:Connect(function()
     isPaused = false
     connectionAttempts = 0
     connectWebSocket()
-    coroutine.wrap(monitorClipboard)()
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
@@ -603,15 +705,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
         print("Paused:", isPaused and "Yes" or "No")
         print("Last Job ID:", activeJobId or "None")
         print("Selected MPS:", selectedMpsRange)
+        print("Selected Brainrots:", #selectedBrainrots > 0 and table.concat(selectedBrainrots, ", ") or "None")
         print("Connection Attempts:", connectionAttempts)
-        print("Clipboard Content:", lastClipboard ~= "" and string.sub(lastClipboard, 1, 20).."..." or "None")
         print("=========================")
     end
 end)
-
--- Initial validation test
-local testJobId = "TpDC0bPR8xuUa8NVLxSS5VtOItFOfpPITHvB8RFWYLPVW4mPKfETQDtPhfUAGDjUqHPUSfNVNbkTuO3Y4xvPSAFN+HkUqHys"
-print("Initial Job ID validation test:", isValidJobId(testJobId) and "PASSED" or "FAILED")
 
 -- Cleanup
 player.AncestryChanged:Connect(function(_, parent)
