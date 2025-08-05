@@ -1,6 +1,5 @@
--- AutoJoiner with Perfect JSON Parsing, Rainbow Title, and Brainrot Filters
+-- AutoJoiner with Exact Brainrot Matching
 local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -19,9 +18,9 @@ local lastHopTime = 0
 local activeJobId = nil
 local selectedMpsRange = "1M-3M"
 local connectionAttempts = 0
-local selectedBrainrots = {} -- Table to store selected brainrots
+local selectedBrainrots = {}
 
--- Brainrot options
+-- Brainrot options (exact matches only)
 local brainrotOptions = {
     "Chicleteira Bicicleteira",
     "Pot Hotspot",
@@ -90,18 +89,17 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Rainbow Colors for Title Animation
+-- Rainbow Title
 local rainbowColors = {
-    Color3.fromRGB(255, 0, 0),    -- Red
-    Color3.fromRGB(255, 127, 0),  -- Orange
-    Color3.fromRGB(255, 255, 0),  -- Yellow
-    Color3.fromRGB(0, 255, 0),    -- Green
-    Color3.fromRGB(0, 0, 255),    -- Blue
-    Color3.fromRGB(75, 0, 130),   -- Indigo
-    Color3.fromRGB(148, 0, 211)   -- Violet
+    Color3.fromRGB(255, 0, 0),
+    Color3.fromRGB(255, 127, 0),
+    Color3.fromRGB(255, 255, 0),
+    Color3.fromRGB(0, 255, 0),
+    Color3.fromRGB(0, 0, 255),
+    Color3.fromRGB(75, 0, 130),
+    Color3.fromRGB(148, 0, 211)
 }
 
--- Advanced Per-Character Rainbow Wave Title
 local titleContainer = Instance.new("Frame")
 titleContainer.Size = UDim2.new(1, -40, 0, 40)
 titleContainer.Position = UDim2.new(0, 20, 0, 15)
@@ -110,14 +108,11 @@ titleContainer.Parent = frame
 
 local titleText = "AutoJoiner"
 local charLabels = {}
-local charWidth = 18 -- Width of each character
-local totalWidth = #titleText * charWidth
 
--- Create individual labels for each character
 for i = 1, #titleText do
     local charLabel = Instance.new("TextLabel")
-    charLabel.Size = UDim2.new(0, charWidth, 1, 0)
-    charLabel.Position = UDim2.new(0, (i-1)*charWidth, 0, 0)
+    charLabel.Size = UDim2.new(0, 18, 1, 0)
+    charLabel.Position = UDim2.new(0, (i-1)*18, 0, 0)
     charLabel.BackgroundTransparency = 1
     charLabel.Text = titleText:sub(i,i)
     charLabel.TextColor3 = rainbowColors[(i-1) % #rainbowColors + 1]
@@ -128,32 +123,17 @@ for i = 1, #titleText do
     table.insert(charLabels, charLabel)
 end
 
--- Adjust container size to fit text exactly
-titleContainer.Size = UDim2.new(0, totalWidth, 0, 40)
-
--- Rainbow wave animation variables
-local waveSpeed = 0.5 -- Speed of the wave effect
+-- Rainbow animation
 local waveOffset = 0
-
--- Advanced wave animation function
-local function startAdvancedRainbowWave()
+coroutine.wrap(function()
     while true do
-        -- Update each character's color based on its position and the wave offset
         for i, label in ipairs(charLabels) do
-            local colorIndex = (i + waveOffset) % #rainbowColors + 1
-            label.TextColor3 = rainbowColors[colorIndex]
+            label.TextColor3 = rainbowColors[(i + waveOffset) % #rainbowColors + 1]
         end
-        
-        -- Increment the wave offset for the next frame
         waveOffset = (waveOffset + 1) % (#rainbowColors * 2)
-        
-        -- Wait for next frame
-        task.wait(waveSpeed / 10)
+        task.wait(0.05)
     end
-end
-
--- Start the animation
-coroutine.wrap(startAdvancedRainbowWave)()
+end)()
 
 -- Tab System
 local tabFrame = Instance.new("Frame")
@@ -218,7 +198,7 @@ filtersTab.MouseButton1Click:Connect(function()
     filtersTab.TextColor3 = Color3.fromRGB(255, 255, 255)
 end)
 
--- Status Label (in main content)
+-- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 20)
 statusLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -230,7 +210,7 @@ statusLabel.TextSize = 14
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Parent = mainContent
 
--- Server Info Label (in main content)
+-- Server Info Label
 local serverInfoLabel = Instance.new("TextLabel")
 serverInfoLabel.Size = UDim2.new(1, 0, 0, 20)
 serverInfoLabel.Position = UDim2.new(0, 0, 0, 25)
@@ -242,7 +222,7 @@ serverInfoLabel.TextSize = 14
 serverInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 serverInfoLabel.Parent = mainContent
 
--- MPS Dropdown System (in main content)
+-- MPS Dropdown
 local mpsLabel = Instance.new("TextLabel")
 mpsLabel.Size = UDim2.new(1, 0, 0, 20)
 mpsLabel.Position = UDim2.new(0, 0, 0, 50)
@@ -262,7 +242,7 @@ mpsDropdown.BorderSizePixel = 0
 mpsDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
 mpsDropdown.Font = Enum.Font.GothamBold
 mpsDropdown.TextSize = 18
-mpsDropdown.Text = "1M-3M  ▼"
+mpsDropdown.Text = "1M-3M ▼"
 mpsDropdown.AutoButtonColor = false
 mpsDropdown.Parent = mainContent
 
@@ -281,17 +261,16 @@ local isMpsDropdownOpen = false
 local function toggleMpsDropdown()
     if isMpsDropdownOpen then
         mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
-        mpsDropdown.Text = selectedMpsRange.."  ▼"
+        mpsDropdown.Text = selectedMpsRange.." ▼"
     else
         mpsOptionsFrame:TweenSize(UDim2.new(1, 0, 0, #mpsRanges * 40), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2)
-        mpsDropdown.Text = selectedMpsRange.."  ▲"
+        mpsDropdown.Text = selectedMpsRange.." ▲"
     end
     isMpsDropdownOpen = not isMpsDropdownOpen
 end
 
 mpsDropdown.MouseButton1Click:Connect(toggleMpsDropdown)
 
--- Create MPS dropdown options
 for i, range in ipairs(mpsRanges) do
     local option = Instance.new("TextButton")
     option.Size = UDim2.new(1, 0, 0, 40)
@@ -314,7 +293,7 @@ for i, range in ipairs(mpsRanges) do
     end)
 end
 
--- Brainrot Filter UI (in filters content)
+-- Brainrot Filter UI
 local brainrotLabel = Instance.new("TextLabel")
 brainrotLabel.Size = UDim2.new(1, 0, 0, 20)
 brainrotLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -362,7 +341,6 @@ end
 
 brainrotDropdown.MouseButton1Click:Connect(toggleBrainrotDropdown)
 
--- Create brainrot dropdown options with checkboxes
 for i, brainrot in ipairs(brainrotOptions) do
     local optionFrame = Instance.new("Frame")
     optionFrame.Size = UDim2.new(1, 0, 0, 40)
@@ -404,7 +382,6 @@ for i, brainrot in ipairs(brainrotOptions) do
     label.ZIndex = 4
     label.Parent = optionFrame
     
-    -- Check if this brainrot is selected
     for _, selected in ipairs(selectedBrainrots) do
         if selected == brainrot then
             checkmark.Visible = true
@@ -436,7 +413,7 @@ for i, brainrot in ipairs(brainrotOptions) do
     end)
 end
 
--- Start Button (in main content)
+-- Control Buttons
 local startBtn = Instance.new("TextButton")
 startBtn.Size = UDim2.new(1, 0, 0, 40)
 startBtn.Position = UDim2.new(0, 0, 0, 160)
@@ -449,7 +426,6 @@ startBtn.Text = "Start"
 startBtn.AutoButtonColor = false
 startBtn.Parent = mainContent
 
--- Stop Button (in main content)
 local stopBtn = Instance.new("TextButton")
 stopBtn.Size = UDim2.new(1, 0, 0, 40)
 stopBtn.Position = UDim2.new(0, 0, 0, 210)
@@ -462,7 +438,6 @@ stopBtn.Text = "Stop"
 stopBtn.AutoButtonColor = false
 stopBtn.Parent = mainContent
 
--- Resume Button (in main content)
 local resumeBtn = Instance.new("TextButton")
 resumeBtn.Size = UDim2.new(1, 0, 0, 40)
 resumeBtn.Position = UDim2.new(0, 0, 0, 260)
@@ -503,15 +478,15 @@ minimizedImage.MouseButton1Click:Connect(function()
 end)
 
 -- WebSocket Functions
-local function isBrainrotMatch(serverName)
+local function isExactBrainrotMatch(serverName)
     if not serverName or #selectedBrainrots == 0 then
-        return true -- No filter or no brainrots selected means match
+        return false
     end
     
-    serverName = string.lower(serverName)
+    local normalizedServer = string.lower(serverName)
     
     for _, brainrot in ipairs(selectedBrainrots) do
-        if string.find(serverName, string.lower(brainrot), 1, true) then
+        if string.lower(brainrot) == normalizedServer then
             return true
         end
     end
@@ -548,80 +523,60 @@ end
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
-    print("[WebSocket] Raw message:", message)
+    -- Parse the specific message format
+    local server_name = message:match('🚀 New Server Detected "(.+)"')
+    local money_per_second = message:match('💰 Money/sec: %$(.+)')
+    local job_id = message:match('🆔 Job ID: "(.+)"')
     
-    -- Parse JSON message
-    local success, data = pcall(function()
-        return HttpService:JSONDecode(message)
-    end)
-    
-    if not success then
-        statusLabel.Text = "Status: Invalid JSON"
+    if not (server_name and money_per_second and job_id) then
+        statusLabel.Text = "Status: Invalid message format"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Failed to parse JSON:", message)
         return
     end
     
-    -- Extract data from JSON
-    local jobId = data.jobId
-    local serverName = data.serverName
-    local mpsText = data.moneyPerSec and data.moneyPerSec:match("([%d%.]+)M")
+    -- Extract MPS value
+    local mps_value = money_per_second:match("([%d%.]+)M")
+    local mps_number = tonumber(mps_value)
     
-    -- Validate required fields
-    if not jobId or not mpsText then
-        statusLabel.Text = "Status: Missing data"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        print("[ERROR] Missing jobId or moneyPerSec in:", data)
-        return
-    end
-    
-    -- Convert MPS to number
-    local mps = tonumber(mpsText)
-    if not mps then
+    if not mps_number then
         statusLabel.Text = "Status: Invalid MPS value"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
     
-    -- Apply MPS filter
+    -- Apply filters
     local shouldJoin = false
-    local mpsMillions = mps -- Already in millions
-
-    if selectedMpsRange == "1M-3M" then
-        shouldJoin = (mpsMillions >= 1 and mpsMillions <= 3)
-    elseif selectedMpsRange == "3M-5M" then
-        shouldJoin = (mpsMillions > 3 and mpsMillions <= 5)
-    elseif selectedMpsRange == "5M-9.9M" then
-        shouldJoin = (mpsMillions > 5 and mpsMillions <= 9.9)
-    elseif selectedMpsRange == "10M+" then
-        shouldJoin = (mpsMillions >= 10)
-    end
+    local isBrainrotMatch = isExactBrainrotMatch(server_name)
     
-    -- Apply brainrot filter if any brainrots are selected
-    if #selectedBrainrots > 0 then
-        local brainrotMatch = isBrainrotMatch(serverName)
-        if brainrotMatch then
-            -- Brainrot matches, override MPS filter
-            shouldJoin = true
+    -- Priority 1: Exact brainrot match
+    if isBrainrotMatch then
+        shouldJoin = true
+        statusLabel.Text = string.format("[BRAINROT] Joining %s", string.sub(job_id, 1, 8))
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+    -- Priority 2: MPS filter
+    else
+        if selectedMpsRange == "1M-3M" then
+            shouldJoin = (mps_number >= 1 and mps_number <= 3)
+        elseif selectedMpsRange == "3M-5M" then
+            shouldJoin = (mps_number > 3 and mps_number <= 5)
+        elseif selectedMpsRange == "5M-9.9M" then
+            shouldJoin = (mps_number > 5 and mps_number <= 9.9)
+        elseif selectedMpsRange == "10M+" then
+            shouldJoin = (mps_number >= 10)
+        end
+        
+        if shouldJoin then
+            statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(job_id, 1, 8), mps_number)
+            statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
-            -- No brainrot match, respect MPS filter
-            -- (shouldJoin remains whatever the MPS filter determined)
+            statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(job_id, 1, 8), mps_number)
+            statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
         end
     end
     
-    -- Take action
     if shouldJoin then
-        statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
-        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        attemptTeleport(jobId, serverName)
-    else
-        statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(jobId, 1, 8), mpsMillions)
-        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
+        attemptTeleport(job_id, server_name)
     end
-    
-    print(string.format("Parsed - JobID: %s | Server: %s | MPS: %.1fM | BrainrotMatch: %s | Action: %s",
-        jobId, serverName or "N/A", mpsMillions, #selectedBrainrots > 0 and isBrainrotMatch(serverName) or "N/A", 
-        shouldJoin and "Joining" or "Skipping"))
 end
 
 local function connectWebSocket()
@@ -631,7 +586,6 @@ local function connectWebSocket()
     statusLabel.Text = string.format("Connecting (%d/%d)...", connectionAttempts, MAX_RETRIES)
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     
-    -- Close existing connection
     if socket then
         pcall(function() socket:Close() end)
         socket = nil
@@ -655,7 +609,6 @@ local function connectWebSocket()
     end)
     
     if not success then
-        print("[ERROR] Connection failed:", err)
         if connectionAttempts < MAX_RETRIES then
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
