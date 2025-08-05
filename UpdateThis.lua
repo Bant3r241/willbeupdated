@@ -1,5 +1,6 @@
--- AutoJoiner with Exact Brainrot Matching
+-- AutoJoiner with Exact Brainrot Matching and JSON Parsing
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -523,35 +524,47 @@ end
 local function handleWebSocketMessage(message)
     if isPaused then return end
     
-    -- Parse the specific message format
-    local server_name = message:match('🚀 New Server Detected "(.+)"')
-    local money_per_second = message:match('💰 Money/sec: %$(.+)')
-    local job_id = message:match('🆔 Job ID: "(.+)"')
+    print("[WebSocket] Raw message:", message)
     
-    if not (server_name and money_per_second and job_id) then
-        statusLabel.Text = "Status: Invalid message format"
+    -- Parse JSON message
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(message)
+    end)
+    
+    if not success then
+        statusLabel.Text = "Status: Invalid JSON"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Failed to parse JSON:", message)
+        return
+    end
+    
+    -- Validate required fields
+    if not (data.jobId and data.serverName and data.moneyPerSec) then
+        statusLabel.Text = "Status: Missing data in JSON"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Missing required fields in JSON:", data)
         return
     end
     
     -- Extract MPS value
-    local mps_value = money_per_second:match("([%d%.]+)M")
+    local mps_value = data.moneyPerSec:match("([%d%.]+)M")
     local mps_number = tonumber(mps_value)
     
     if not mps_number then
         statusLabel.Text = "Status: Invalid MPS value"
         statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[ERROR] Invalid MPS value:", data.moneyPerSec)
         return
     end
     
     -- Apply filters
     local shouldJoin = false
-    local isBrainrotMatch = isExactBrainrotMatch(server_name)
+    local isBrainrotMatch = isExactBrainrotMatch(data.serverName)
     
     -- Priority 1: Exact brainrot match
     if isBrainrotMatch then
         shouldJoin = true
-        statusLabel.Text = string.format("[BRAINROT] Joining %s", string.sub(job_id, 1, 8))
+        statusLabel.Text = string.format("[BRAINROT] Joining %s", string.sub(data.jobId, 1, 8))
         statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
     -- Priority 2: MPS filter
     else
@@ -566,17 +579,25 @@ local function handleWebSocketMessage(message)
         end
         
         if shouldJoin then
-            statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(job_id, 1, 8), mps_number)
+            statusLabel.Text = string.format("Joining %s (%.1fM/s)", string.sub(data.jobId, 1, 8), mps_number)
             statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
-            statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(job_id, 1, 8), mps_number)
+            statusLabel.Text = string.format("Skipping %s (%.1fM/s)", string.sub(data.jobId, 1, 8), mps_number)
             statusLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
         end
     end
     
     if shouldJoin then
-        attemptTeleport(job_id, server_name)
+        attemptTeleport(data.jobId, data.serverName)
     end
+    
+    print(string.format(
+        "Server: %s | MPS: %.1f | BrainrotMatch: %s | Action: %s",
+        data.serverName,
+        mps_number,
+        isBrainrotMatch and "YES" or "NO",
+        shouldJoin and "JOINING" or "SKIPPING"
+    ))
 end
 
 local function connectWebSocket()
@@ -609,6 +630,7 @@ local function connectWebSocket()
     end)
     
     if not success then
+        print("[ERROR] Connection failed:", err)
         if connectionAttempts < MAX_RETRIES then
             task.wait(RECONNECT_DELAY)
             connectWebSocket()
