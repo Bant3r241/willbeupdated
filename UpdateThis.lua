@@ -26,12 +26,9 @@ local brainrotOptions = {
     "Chicleteira Bicicleteira",
     "Pot Hotspot",
     "Graipuss Medussi",
-    "Bubble Gum Bicycle",
-    "Hot Pot Spot",
-    "Grapefruit Medusa",
-    "Chicle Bici",
-    "Marijuana Hotspot",
-    "Grape Medusa"
+    "Los Combinasionas",
+    "La Grande Combinasion",
+    "Garama and Madundung",
 }
 
 -- Wait for player GUI
@@ -692,3 +689,4 @@ player.AncestryChanged:Connect(function(_, parent)
         pcall(function() socket:Close() end)
     end
 end)
+
